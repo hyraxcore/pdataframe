@@ -82,3 +82,14 @@ var file = await DataFrame.read_csv('lib/files/data.csv');
 // Create csv file called dataOutput.csv and store df data in it
 df.to_csv(file:'lib/files/dataOutput.csv', index: true);
 ```
+### Miscellaneous Functions
+These functions provide additional flexibility and allow for fine-tuning specific behaviors. 
+
+- Basic Aggregation Methods: min(), max(), mean(),
+- `reset_index()`: Resets the row index of the DataFrame to a default integer-based index.
+- `sort()`: Sorts the DataFrame rows by a specified column.
+- `head()`: Returns the first N rows of the DataFrame.
+- `info()`: Prints and returns a summary of the DataFrame, including the column index, name, non-null count, and data type.
+- `table()`: Converts the entire DataFrame to a list of rows, optionally including the row index as the first column.
+
+For more details, refer to the full documentation or the code comments.

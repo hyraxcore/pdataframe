@@ -53,6 +53,23 @@ void main() {
       expect(df.index, equals([0, 1, 2]));  // Auto-generated index
       expect(df.columns, equals(['A', 'B', 'C']));  // Check that column names match Map keys
     });
+    test('Map argument with columns parameter', () {
+      // Test DataFrame created using an empty Map with the columns argument
+      var dfm = DataFrame({}, columns: ['a', 'b']);
+      expect(dfm.columns, equals(['a', 'b'])); // The DataFrame is initialized with column labels 'a' and 'b'
+      expect(dfm.values, equals([[], []])); // The DataFrame contains no data; columns are empty lists
+
+      // Test DataFrame with an input Map containing data and a matching columns argument
+      dfm = DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6]}, columns: ['a', 'b']);
+      expect(dfm.columns, equals(['a', 'b'])); // The DataFrame contains the specified column labels 'a' and 'b'
+      expect(dfm.values, equals([[1, 2, 3], [4, 5, 6]])); // Data matches the input Map values for 'a' and 'b'
+
+      // Test DataFrame with an input Map that partially matches the column names in the columns argument
+      dfm = DataFrame({'c': [7, 8, 9], 'b': [1, 2, 3]}, columns: ['a', 'b']);
+      expect(dfm.columns, equals(['a', 'b'])); // The DataFrame only includes the specified columns 'a' and 'b'; 'c' and its data are ignored
+      expect(dfm.values[0].every((element) => (element as double).isNaN), isTrue); // The column for 'a' is filled with NaN, as no matching data is provided in the Map
+      expect(dfm.values[1], equals([1, 2, 3])); // The column for 'b' contains the corresponding data from the input Map
+    });
     test('Throws error if column values have inconsistent lengths', () {
       final invalidMap = {
         'A': [1, 2],
