@@ -25,7 +25,7 @@ class DataFrame {
   /// 
   /// Example: var df = DataFrame([[1,2,3],[4,5,6],[7,8,9]], columns: ['a','b',0]); 
   // This constructor processes different input types (List, Map, or Series) and normalizes them 
-  // to ensure that the internal matrix (_matrix) is structured correctly for further operations.
+  // to ensure that the internal data (_dataCore) is structured correctly for further operations.
   DataFrame( var inputData, {List columns = const [], List index = const []}) {
     // Handle empty data (with column names), List, and Map input
     if (inputData == null || 
@@ -52,7 +52,7 @@ class DataFrame {
     if(inputData.every((element) => element is! List && element is! Series)){ 
       inputData = inputData.map( (e) => [e]).toList(growable:true);
     }
-    if(inputData.every((element) => element is List && element.every((subElement) => subElement is! List))) {  //Ensure inputData is a 2D matrix (List<List>) or throw error
+    if(inputData.every((element) => element is List && element.every((subElement) => subElement is! List))) {  // Ensure inputData is a 2D matrix (List<List>) or throw error
     //1.b. Normalize row lengths: If inputData rows are not the same length, fill it in with NaN
       int longestRow = 0; // Determine longest row length
       for (var row in inputData) {
@@ -136,7 +136,7 @@ class DataFrame {
     }
     
     // 3. ADD DATA TO MATRIX
-    // 3.a. Populate _matrix.data with the values from the Map. If a value is a List, add it directly. If primitives, wrap it in a List.
+    // 3.a. Populate _dataCore.data with the values from the Map. If a value is a List, add it directly. If primitives, wrap it in a List.
     // If columns parameter was passed an argument, match the labels with the keys; for each match add the data, if it doesn't match, add NaN.
     if(columns.isEmpty){
       for (var value in inputData.values) {
@@ -293,7 +293,7 @@ class DataFrame {
   ///   ```
   DataFrame drop(var input, {int axis = 0, bool inplace = false, int select = 0}) {
     DataFrame df = this;
-    var matrix = _dataCore;
+    var dataCore = _dataCore;
     var indexMap = axis == 0 ? _dataCore.rowIndexMap : _dataCore.columnIndexMap;
     var data = _dataCore.data;
     var columnTypes = _dataCore.columnTypes;
@@ -301,7 +301,7 @@ class DataFrame {
     //Create copy of object if inplace parameter is false
     if(inplace == false) {
       df = DataFrame._copyDataframe(this);
-      matrix = df._dataCore;
+      dataCore = df._dataCore;
       indexMap = axis == 0 ? df._dataCore.rowIndexMap : df._dataCore.columnIndexMap;
       data = df._dataCore.data;
       columnTypes = df._dataCore.columnTypes;
@@ -322,7 +322,7 @@ class DataFrame {
               }
             }
           }
-          matrix.editIndices(indexName: input, isColumn: false, select: select);
+          dataCore.editIndices(indexName: input, isColumn: false, select: select);
           if(data[0].isEmpty){
             columnTypes.clear();
           }
@@ -334,7 +334,7 @@ class DataFrame {
                 data.removeAt(valueColIndex);
             }
           }
-          matrix.editIndices(indexName: input, isColumn: true, select: select);
+          dataCore.editIndices(indexName: input, isColumn: true, select: select);
         } else {
           throw ArgumentError('Not a valid axis value');
         }   
@@ -346,7 +346,7 @@ class DataFrame {
               data[i].removeAt(rowIndex);
             }
           }
-          matrix.editIndices(indexName: input, isColumn: false);
+          dataCore.editIndices(indexName: input, isColumn: false);
           if(data[0].isEmpty){
             columnTypes.clear();
           }
@@ -354,7 +354,7 @@ class DataFrame {
           for(var colIndex in reversedIndex){ // Iterate backwards
               data.removeAt(colIndex);    
           }
-          matrix.editIndices(indexName: input, isColumn: true);
+          dataCore.editIndices(indexName: input, isColumn: true);
         } else {
           throw ArgumentError('Not a valid axis value');
           }
@@ -562,7 +562,7 @@ class DataFrame {
       int indexPositionToMove = df._dataCore.rowIndexMap[data.keys.first][select.keys.first - 1];
       int newIndexPosition = df._dataCore.rowIndexMap[data.values.first][select.values.first - 1];
       // 3.e. Create a new matrix to hold the reordered data
-      List newMatrix = [];
+      List newCore = [];
       // Create a list of indices representing the current order
       List<int> indices = List<int>.generate(df._dataCore.data[0].length, (i) => i);
       // Remove the index of the row to move
@@ -571,13 +571,13 @@ class DataFrame {
       indices.insert(newIndexPosition, indexPositionToMove);
 
       for (int i = 0; i < df._dataCore.data.length; i++) {
-        newMatrix.add(createListFromType(df._dataCore.columnTypes[i]));
+        newCore.add(createListFromType(df._dataCore.columnTypes[i]));
         for (int idx in indices) {
-          newMatrix[i].add(df._dataCore.data[i][idx]);
+          newCore[i].add(df._dataCore.data[i][idx]);
         }
       }
       // 3.f. Update the DataFrame's data with the new matrix
-      df._dataCore.data = newMatrix;
+      df._dataCore.data = newCore;
       // 3.g. Adjust the row index accordingly
       df._dataCore.editIndices(indexName: data.keys.first,isColumn: false,select: select.keys.first,moveTo: newIndexPosition);
 
@@ -664,7 +664,7 @@ class DataFrame {
   DataFrame append(var newRow, {List index = const [], List columns = const [], bool ignore_index = false, bool inplace = false,}) {
     DataFrame df1 = empty;
     if(inplace==false){
-      //Make copy of instance _matrix and use it instead so that original is not modified
+      //Make copy of instance _dataCore and use it instead so that original is not modified
       df1 = DataFrame._copyDataframe(this);
     } else{
       df1 = this;
@@ -1051,9 +1051,9 @@ class DataFrame {
 
     // Handle in-place sorting
     if (inplace) {
-      _dataCore.data = newDf._matrix.data;
-      _dataCore.rowIndexMap = newDf._matrix.rowIndexMap;
-      _dataCore.columnIndexMap = newDf._matrix.columnIndexMap;
+      _dataCore.data = newDf._dataCore.data;
+      _dataCore.rowIndexMap = newDf._dataCore.rowIndexMap;
+      _dataCore.columnIndexMap = newDf._dataCore.columnIndexMap;
       newDf = empty;  // Returns empty if accidentally assigned to sort() when inplace is true
     }
 
@@ -1318,7 +1318,7 @@ class DataFrame {
   ///   df.iloc(row: 3, edit: 'newValue'); // Updates all elements in row 3 with 'newValue'.
   ///   ```
   iloc({required row, var col, var edit}) {
-    var matrix = _dataCore.data;
+    var dataCore = _dataCore.data;
     // 1. STANDARD OPERATION: ROW IS A NON-MAP VALUE
     // 1.a. If 'row' is a non-Map value (int or String), retrieve or edit a single row
     if ((row is int || row is String) && row is! Map) {
@@ -1326,8 +1326,8 @@ class DataFrame {
       // 1.b. If 'col' and 'edit' are not provided, return the entire row as a List
       if (col == null && edit == null) {
         List<dynamic> newRow = [];
-        for (int i = 0; i < matrix.length; i++) {
-          var element = matrix[i][rowIndex];
+        for (int i = 0; i < dataCore.length; i++) {
+          var element = dataCore[i][rowIndex];
           Type columnType = dtypes[i];
           // Ensure type consistency for elements of 'Object' type
           if (columnType == Object && (element is int || element is double)) {
@@ -1342,29 +1342,29 @@ class DataFrame {
       if (col is int) {
         if (edit != null) {
           // 1.c.i. Update the element if 'edit' is provided
-          matrix[col][rowIndex] = edit;
+          dataCore[col][rowIndex] = edit;
           return '';
         } else {
           // 1.c.ii. Return the element at the specified row and column
-          return matrix[col][rowIndex];
+          return dataCore[col][rowIndex];
         }
       }
       // 1.d. If 'col' is not specified but 'edit' is, update the entire row
       if (col == null) {
         // 1.d.i. If 'edit' is not a List, apply the same value to all columns in the row
         if (edit != null && (edit is! List && edit is! Iterable)) {
-          for (int i = 0; i < matrix.length; i++) {
-            matrix[i][rowIndex] = edit;
+          for (int i = 0; i < dataCore.length; i++) {
+            dataCore[i][rowIndex] = edit;
           }
           return '';
         // 1.d.ii. If 'edit' is a List/Iterable, update the row with the new values
         } else if (edit != null && (edit is List || edit is Iterable)) {
-          if (matrix.length != edit.length) {
+          if (dataCore.length != edit.length) {
             throw ArgumentError('Number of values in new data must equal the number of columns in the dataframe');
           }
           int counter = 0;
           for (var e in edit) {
-            matrix[counter][rowIndex] = e;
+            dataCore[counter][rowIndex] = e;
             ++counter;
           }
           return '';
@@ -1380,7 +1380,7 @@ class DataFrame {
       for (var e in row) {
         if (e is int) {
           newRowIndices.add(reverseRowKV[e]);
-          newData.add(matrix.map((column) => column[e]).toList());
+          newData.add(dataCore.map((column) => column[e]).toList());
         } else {
           throw ArgumentError('List elements must be integers');
         }
@@ -2044,12 +2044,12 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
     DataFrame newDataFrame = DataFrame._copyDataframe(input.first);
     // 3. CONCATENATE DATA VERTICALLY (axis = 0)
     if (axis == 0) {
-      Set joinColumnTracker = input.first._matrix.columnIndexMap.keys.toSet();  // Track columns for joining
+      Set joinColumnTracker = input.first._dataCore.columnIndexMap.keys.toSet();  // Track columns for joining
       List df1ColumnNames = input.first.columns;
       // 3.a. Inner join: only keep columns present in all DataFrames
       if (join == 'inner' && !(df1ColumnNames.length != df1ColumnNames.toSet().length)) {
         for (var df in input.skip(1)) {
-          joinColumnTracker = joinColumnTracker.intersection(df._matrix.columnIndexMap.keys.toSet());
+          joinColumnTracker = joinColumnTracker.intersection(df._dataCore.columnIndexMap.keys.toSet());
         } 
         if (joinColumnTracker.isNotEmpty) {
           // Clear DataFrame while retaining some metadata
@@ -2059,16 +2059,16 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
           // Temporarily store new column types
           List<Type> newTempColumnTypes = <Type>[];
           for (var columnName in joinColumnTracker) {
-            int colIndex = input[0]._matrix.columnIndexMap[columnName].first;
-            newDataFrame._dataCore.data.add(input[0]._matrix.data[colIndex]);
-            newTempColumnTypes.add(input[0]._matrix.columnTypes[colIndex]);
+            int colIndex = input[0]._dataCore.columnIndexMap[columnName].first;
+            newDataFrame._dataCore.data.add(input[0]._dataCore.data[colIndex]);
+            newTempColumnTypes.add(input[0]._dataCore.columnTypes[colIndex]);
           }
           // Add data from subsequent DataFrames based on common columns
           for (var df in input.skip(1)) {
             newDataFrame._dataCore.indexer(df.index, false);
             for (var columnName in joinColumnTracker) {
               int colIndex1 = newDataFrame._dataCore.columnIndexMap[columnName].first;
-              int colIndex2 = df._matrix.columnIndexMap[columnName].first;
+              int colIndex2 = df._dataCore.columnIndexMap[columnName].first;
               newDataFrame._combineColumnFromDf(df2: df, columnIndex1: colIndex1, columnIndex2: colIndex2);
             }
           }
@@ -2091,7 +2091,7 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
             }
             if (areListsEqual(input.first.columns, df.columns)) {
               newDataFrame._dataCore.indexer(df.index, false);
-              for (int i = 0; i < df._matrix.data.length; i++) {
+              for (int i = 0; i < df._dataCore.data.length; i++) {
                 newDataFrame._combineColumnFromDf(df2: df, columnIndex1: i, columnIndex2: i);
               }
             } else {
@@ -2107,31 +2107,31 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
             var dfColumnStartPoint = newDataFrame._dataCore.rowLastIndexVal;
             for (var key in newDataFrame._dataCore.columnIndexMap.keys) {
               var colIndex1 = newDataFrame._dataCore.columnIndexMap[key].first;
-              if (df._matrix.columnIndexMap.containsKey(key)) {
-                var colIndex2 = df._matrix.columnIndexMap[key].first;
+              if (df._dataCore.columnIndexMap.containsKey(key)) {
+                var colIndex2 = df._dataCore.columnIndexMap[key].first;
                 keysThatWereUsed.add(key);
                 newDataFrame._combineColumnFromDf(df2: df, columnIndex1: colIndex1, columnIndex2: colIndex2);
               } else {
-                for (int i = 0; i < df._matrix.rowLastIndexVal + 1; i++) {
+                for (int i = 0; i < df._dataCore.rowLastIndexVal + 1; i++) {
                   newDataFrame._dataCore.addEditType(input: double.nan, colIndex: colIndex1);
                 }
               }
             }
             // Add new columns from df if not already in newDataFrame
-            for (var key in df._matrix.columnIndexMap.keys) {
+            for (var key in df._dataCore.columnIndexMap.keys) {
               if (keysThatWereUsed.contains(key)) {
                 continue;
               }
-              var colIndex = df._matrix.columnIndexMap[key].last;
+              var colIndex = df._dataCore.columnIndexMap[key].last;
               List columnToBeAdded;
-              if (df._matrix.columnTypes[colIndex] == int) {
+              if (df._dataCore.columnTypes[colIndex] == int) {
                 List tempColumn = <double>[];
-                for (int e in df._matrix.data[colIndex]) {
+                for (int e in df._dataCore.data[colIndex]) {
                   tempColumn.add(e.toDouble());
                 }
                 columnToBeAdded = <double>[];
                 newDataFrame._dataCore.columnTypes.add(double);
-              } else if (df._matrix.columnTypes[colIndex] == double) {
+              } else if (df._dataCore.columnTypes[colIndex] == double) {
                 columnToBeAdded = <double>[];
                 newDataFrame._dataCore.columnTypes.add(double);
               } else {
@@ -2141,16 +2141,16 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
               newDataFrame._dataCore.indexer([key], true);
               newDataFrame._dataCore.data.add(columnToBeAdded);
               var newColumnName = newDataFrame._dataCore.columnIndexMap[key].first;
-              var dfColIndex = df._matrix.columnIndexMap[key].first;
-              dfColumnStartPoint = (newDataFrame._dataCore.rowLastIndexVal - df._matrix.rowLastIndexVal) as int;
+              var dfColIndex = df._dataCore.columnIndexMap[key].first;
+              dfColumnStartPoint = (newDataFrame._dataCore.rowLastIndexVal - df._dataCore.rowLastIndexVal) as int;
               for (int k = 0; k <= newDataFrame._dataCore.rowLastIndexVal; k++) {
                 if (k < dfColumnStartPoint) {
                   newDataFrame._dataCore.data[newColumnName].add(double.nan);
                 } else {
-                  if (df._matrix.columnTypes[dfColIndex] == int) {
-                    newDataFrame._dataCore.data[newColumnName].add(df._matrix.data[dfColIndex][k - dfColumnStartPoint].toDouble());
+                  if (df._dataCore.columnTypes[dfColIndex] == int) {
+                    newDataFrame._dataCore.data[newColumnName].add(df._dataCore.data[dfColIndex][k - dfColumnStartPoint].toDouble());
                   } else {
-                    newDataFrame._dataCore.data[newColumnName].add(df._matrix.data[dfColIndex][k - dfColumnStartPoint]);
+                    newDataFrame._dataCore.data[newColumnName].add(df._dataCore.data[dfColIndex][k - dfColumnStartPoint]);
                   }
                 }
               }
@@ -2161,12 +2161,12 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
     }
     // 4. CONCATENATE DATA HORIZONTALLY (axis = 1)
     else if (axis == 1) {
-      Set joinRowsTracker = input.first._matrix.rowIndexMap.keys.toSet();
+      Set joinRowsTracker = input.first._dataCore.rowIndexMap.keys.toSet();
       Map df1RowIndexMap = newDataFrame._dataCore.rowIndexMap;
       // 4.a. Inner join: keep only rows common to all DataFrames
       if (join == 'inner') {
         for (var df in input.skip(1)) {
-          joinRowsTracker = joinRowsTracker.intersection(df._matrix.rowIndexMap.keys.toSet());
+          joinRowsTracker = joinRowsTracker.intersection(df._dataCore.rowIndexMap.keys.toSet());
         }
         if (joinRowsTracker.isNotEmpty) {
           newDataFrame._dataCore.clear();
@@ -2174,17 +2174,17 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
           for (var df in input) {
             newDataFrame._dataCore.indexer(df.columns, true);
             List tempData = [];
-            for (int i = 0; i < df._matrix.data.length; i++) {
-              tempData.add(createListFromType(df._matrix.columnTypes[i]));
+            for (int i = 0; i < df._dataCore.data.length; i++) {
+              tempData.add(createListFromType(df._dataCore.columnTypes[i]));
             }
             for (var i in joinRowsTracker) {
-              var rowIndex = df._matrix.rowIndexMap[i].first;
-              for (int j = 0; j < df._matrix.data.length; j++) {
-                tempData[j].add(df._matrix.data[j][rowIndex]);
+              var rowIndex = df._dataCore.rowIndexMap[i].first;
+              for (int j = 0; j < df._dataCore.data.length; j++) {
+                tempData[j].add(df._dataCore.data[j][rowIndex]);
               }
             }
             newDataFrame._dataCore.data.addAll(tempData);
-            newDataFrame._dataCore.columnTypes.addAll(df._matrix.columnTypes);
+            newDataFrame._dataCore.columnTypes.addAll(df._dataCore.columnTypes);
           }
         } else {
           newDataFrame._dataCore.clear(except: {'columnLastIndexVal', 'columnIndexMap'});
@@ -2194,11 +2194,11 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
         for (var df in input.skip(1)) {
           newDataFrame._dataCore.indexer(df.columns, true);
           var df1Index = newDataFrame._dataCore.rowIndexMap.keys;
-          var df2Index = df._matrix.rowIndexMap.keys;
+          var df2Index = df._dataCore.rowIndexMap.keys;
 
           if (areIterablesEqualUnordered(df1Index, df2Index)) {
-            newDataFrame._dataCore.data.addAll(df._matrix.data);
-            newDataFrame._dataCore.columnTypes.addAll(df._matrix.columnTypes);
+            newDataFrame._dataCore.data.addAll(df._dataCore.data);
+            newDataFrame._dataCore.columnTypes.addAll(df._dataCore.columnTypes);
           } else {
             if (df == input[1]) {
               for (int i = 0; i < newDataFrame._dataCore.columnTypes.length; i++) {
@@ -2218,24 +2218,24 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
               }
             }
             for (int i = 0; i < df.columns.length; i++) {
-              if (df._matrix.columnTypes[i] == int || df._matrix.columnTypes[i] == double) {
+              if (df._dataCore.columnTypes[i] == int || df._dataCore.columnTypes[i] == double) {
                 newDataFrame._dataCore.data.add(List<double>.filled(newDataFrame.index.length, double.nan, growable: true));
                 newDataFrame._dataCore.columnTypes.add(double);
-              } else if (df._matrix.columnTypes[i] != Object || df._matrix.columnTypes[i] != double) {
+              } else if (df._dataCore.columnTypes[i] != Object || df._dataCore.columnTypes[i] != double) {
                 newDataFrame._dataCore.data.add(List<Object>.filled(newDataFrame.index.length, double.nan, growable: true));
                 newDataFrame._dataCore.columnTypes.add(Object);
               }
             }
             List df2Index = df.index;
-            var dfColStartPosition = (newDataFrame._dataCore.columnLastIndexVal - df._matrix.columnLastIndexVal) as int;
+            var dfColStartPosition = (newDataFrame._dataCore.columnLastIndexVal - df._dataCore.columnLastIndexVal) as int;
             for (var key in df2Index) {
               if (df1RowIndexMap.containsKey(key)) {
                 int df1rowIndex = df1RowIndexMap[key].first;
                 for (int j = 0; j < df.columns.length; j++) {
-                  if (df._matrix.columnTypes[j] == int) {
-                    newDataFrame._dataCore.data[dfColStartPosition + j][df1rowIndex] = df._matrix.data[j][df._matrix.rowIndexMap[key].first].toDouble();
+                  if (df._dataCore.columnTypes[j] == int) {
+                    newDataFrame._dataCore.data[dfColStartPosition + j][df1rowIndex] = df._dataCore.data[j][df._dataCore.rowIndexMap[key].first].toDouble();
                   } else {
-                    newDataFrame._dataCore.data[dfColStartPosition + j][df1rowIndex] = df._matrix.data[j][df._matrix.rowIndexMap[key].first];
+                    newDataFrame._dataCore.data[dfColStartPosition + j][df1rowIndex] = df._dataCore.data[j][df._dataCore.rowIndexMap[key].first];
                   }
                 }
               } else {
@@ -2244,10 +2244,10 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
                   if (k < dfColStartPosition) {
                     newDataFrame._dataCore.data[k].add(double.nan);
                   } else {
-                    if (df._matrix.columnTypes[k - dfColStartPosition] == int) {
-                      newDataFrame._dataCore.data[k].add(df._matrix.data[k - dfColStartPosition][df._matrix.rowIndexMap[key].first].toDouble());
+                    if (df._dataCore.columnTypes[k - dfColStartPosition] == int) {
+                      newDataFrame._dataCore.data[k].add(df._dataCore.data[k - dfColStartPosition][df._dataCore.rowIndexMap[key].first].toDouble());
                     } else {
-                      newDataFrame._dataCore.data[k].add(df._matrix.data[k - dfColStartPosition][df._matrix.rowIndexMap[key].first]);
+                      newDataFrame._dataCore.data[k].add(df._dataCore.data[k - dfColStartPosition][df._dataCore.rowIndexMap[key].first]);
                     }
                   }
                 }
