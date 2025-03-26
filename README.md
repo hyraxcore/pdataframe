@@ -82,6 +82,13 @@ var file = await DataFrame.read_csv('lib/files/data.csv');
 // Create csv file called dataOutput.csv and store df data in it
 df.to_csv(file:'lib/files/dataOutput.csv', index: true);
 ```
+
+Timestamp (basic functionality)
+```dart
+// Create a Timestamp
+var ts1 = Timestamp("February 9, 1999");
+```
+
 ### Miscellaneous Functions
 These functions provide additional flexibility and allow for fine-tuning specific behaviors. 
 

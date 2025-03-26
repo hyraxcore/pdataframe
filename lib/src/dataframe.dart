@@ -6,7 +6,7 @@ import 'data_core.dart';
 import 'series.dart';
 import 'dfunctions.dart';
 
-/// The main dataframe class
+/// The main DataFrame class.
 class DataFrame {
   
   // * Fields *
@@ -14,7 +14,7 @@ class DataFrame {
 
   // * Constructors * 
 
-  /// Main constructor for the DataFrame class.
+  /// Creates a new DataFrame.
   ///  
   /// - Parameters: 
   ///   - inputData: The primary data for the DataFrame. It can be a `List` or `Map`. 
@@ -24,9 +24,9 @@ class DataFrame {
   ///   - index: Optional. A list of row labels. If not provided, row indices will be auto-generated.
   /// 
   /// Example: var df = DataFrame([[1,2,3],[4,5,6],[7,8,9]], columns: ['a','b',0]); 
-  // This constructor processes different input types (List, Map, or Series) and normalizes them 
-  // to ensure that the internal data (_dataCore) is structured correctly for further operations.
   DataFrame( var inputData, {List columns = const [], List index = const []}) {
+    // This constructor processes different input types (List, Map, or Series) and normalizes them 
+    // to ensure that the internal data (_dataCore) is structured correctly for further operations.
     // Handle empty data (with column names), List, and Map input
     if (inputData == null || 
         (inputData is Iterable && inputData.isEmpty) ||
@@ -44,8 +44,8 @@ class DataFrame {
         throw ArgumentError('Data must be either a Map, List or Series type');
     }
   }
-  /// Helper method for processing List input in the DataFrame constructor
-  //  Note: Data needs to be normalized (no missing data for rows/columns) first before indexer is called to determine correct max length 
+  // Helper method for processing List input in the DataFrame constructor
+  // Note: Data needs to be normalized (no missing data for rows/columns) first before indexer is called to determine correct max length 
   void _processList(var inputData, List columns, List index) {
     // 1. DATA PROCESSING 
     // 1.a. List type check: If List elements are primitives, encapsulate them in a List, then proceed as usual.
@@ -108,7 +108,7 @@ class DataFrame {
     }
     else{throw ArgumentError('Input not a valid type');}
   }
-  /// Helper method for processing Map input in the DataFrame constructor
+  // Helper method for processing Map input in the DataFrame constructor
   void _processMap(var inputData, List columns, List index) {
     // 1. INITIALIZE COLUMNS - Add column names from the Map keys. Map requires k/v, no need to check column names to number of columns.
     if(columns.isNotEmpty){
@@ -241,7 +241,7 @@ class DataFrame {
       _dataCore.indexer(index, false, resetIndex: true); //resetIndex because it was incremented earlier
       
   }
-  /// Create a copy of a DataFrame
+  // Create a copy of a DataFrame
   DataFrame._copyDataframe(DataFrame df) {
     _dataCore.columnIndexMap = Map.from(df._dataCore.columnIndexMap).map((key, value) => MapEntry(key, List<int>.from(value)));
     _dataCore.rowIndexMap = Map.from(df._dataCore.rowIndexMap).map((key, value) => MapEntry(key, List<int>.from(value)));
@@ -265,7 +265,7 @@ class DataFrame {
     }
   }
   
-  /// Creates an empty DataFrame
+  /// Creates an empty DataFrame.
   static final DataFrame empty = DataFrame._empty();
   DataFrame._empty();
 
@@ -639,7 +639,7 @@ class DataFrame {
     return;
   }
 
-  /// Appends new rows to the DataFrame
+  /// Appends new rows to the DataFrame.
   ///
   /// - Parameters:
   ///   - newRow: The data to append, which can be a `Map` or `List`. If a `Map`, it can only add a single row.
@@ -697,7 +697,7 @@ class DataFrame {
     }
     return df1;
   }
-  /// Helper method for append(), processing List type.
+  // Helper method for append(), processing List type.
   void _listAppend(List newRows, DataFrame df1, {List index = const [], List columns = const [], bool ignore_index = false, bool inplace = false,}) {
     if(newRows.every( (e)=>e is List)){ // List - List
       List dfcolumns = this.columns;
@@ -730,7 +730,7 @@ class DataFrame {
         }
     }
   }
-  /// Helper method for append(), processing Map type.
+  // Helper method for append(), processing Map type.
   void _mapAppend(Map newRows, DataFrame df1, {List index = const [], List columns = const [], bool ignore_index = false, bool inplace = false,}) {
       if(ignore_index == false){
         throw ArgumentError('ignore_index must be set to true for Map input');
@@ -803,7 +803,7 @@ class DataFrame {
 
   // ** CSV read and write methods **
 
-  /// Reads a CSV file from a local file path or a remote data string, and returns a DataFrame.
+  /// Reads a CSV file from a local file path or a remote data string and returns a DataFrame.
   /// 
   /// Usage example: var dfCsv = await pDataFrame.read_csv(path: 'lib/test.csv');
   /// 
@@ -1059,7 +1059,7 @@ class DataFrame {
 
     return newDf;
   }
-  /// Default comparison function used by the sort() method
+  // Default comparison function used by the sort() method
   int _customSortParameter(var numberA, var numberB, var colIndex, bool nullIsFirst) {
     var localColumn = _dataCore.data[colIndex];
     var columnValA = localColumn[numberA];
@@ -1237,7 +1237,7 @@ class DataFrame {
     }
   }
 
-  /// Helper method when combining data from two dataframes. Adjusts for type differences.
+  // Helper method when combining data from two DataFrames. Adjusts for type differences.
   void _combineColumnFromDf({required var df2, required int columnIndex1, required int columnIndex2,}){
     if(df2 is! DataFrame && df2 is! List){
       throw ArgumentError('df2 must be either a DataFrame or List');
@@ -1424,7 +1424,7 @@ class DataFrame {
     // 4. INVALID INPUT CASE: THROW ERROR - If no valid input type or range is matched, throw an error
     throw ArgumentError('Invalid input type or range.');
   }
-  /// Edit data in a row using [][] operators
+  /// Edit data in a row using [][] operators.
   /// - Example:
   ///   ```dart
   ///   df.editRow['City']['Temperature] = 20; // Edit the row City and the column Temperature to the value of 20
@@ -1821,22 +1821,21 @@ class DataFrame {
     return table;
   }
 
-//* Getters
+  //* Getters
   
-  /// Gets the row indices of the DataFrame
+  /// Returns the row indices of the DataFrame.
   List get index => _dataCore.orderedEntries(_dataCore.rowIndexMap, false);
-  /// Sets a new List of row indices for the DataFrame.
+  /// Sets the row index labels for the DataFrame.
   set index(List newRowIndices){
     if(newRowIndices.length != _dataCore.rowLastIndexVal+1){
       throw ArgumentError('Row index does not much');
     }
     _dataCore.indexer(newRowIndices, false, resetIndex: true);
   }
-
-  /// A List of all the column names
+  /// Returns a list of column names.
   List get columns => _dataCore.orderedEntries(_dataCore.columnIndexMap, true);
-  /// Sets a new List of column names for the DataFrame. 
-  /// Note: Use rename() when renaming an individual column.
+  /// Sets a new list of column names for the DataFrame. 
+  /// Note: Use [rename()] when renaming a single column.
   set columns(List newColumnNames){ 
     if(newColumnNames.length != _dataCore.columnLastIndexVal+1){
       throw ArgumentError('Number of column names entered must match original');
@@ -1844,13 +1843,13 @@ class DataFrame {
       _dataCore.indexer(newColumnNames, true, resetIndex: true);
     }
   }
-  /// The DataFrame data in a List (pd)
+  /// The raw data of the DataFrame.
   get values => _dataCore.data;
 
-  /// The number of rows in the DataFrame
+  /// The number of rows in the DataFrame.
   int get length => _dataCore.rowLastIndexVal+1;
   
-  /// A List containing the Type for each column
+  /// A List containing the type for each column.
   get dtypes => _dataCore.columnTypes;
   
   // * Overrides 
@@ -1911,13 +1910,14 @@ class DataFrame {
     }
   }
 
-  /// Replaces an entire column of data. If multiple columns share the same name, 
-  /// they will all be replaced with the same List argument.
+  /// Replaces an entire column of data. 
+  /// 
+  /// Note: If multiple columns share the same name, they will all be replaced with the same data.
   void operator []=(var columnName, List inputData) {
     _dataCore[columnName] = inputData;
   }
 
-  /// Prints a formatted table of the DataFrame data to the terminal
+  /// Prints a formatted table of the DataFrame data to the terminal.
   @override
   String toString() {
     final buffer = StringBuffer('\n');
@@ -2023,7 +2023,7 @@ class DataFrame {
 ///           - 'outer' returns all rows or columns, without filtering.
 ///   - ignore_index: (Optional) If true, ignores the existing index and generates a new one.
 /// 
-/// - Usage Notes (pd3.9):
+/// - Usage Notes:
 ///   - axis = 0, join = 'outer': `df1` cannot have non-unique column names unless `df2` has the exact same column names in the same order.
 ///                               If `df1` has unique column names, `df2` cannot have non-unique column names. Row names (index) can be non-unique.
 ///   - axis = 0, join = 'inner': `df1` column names must be unique, even if they match the column names in `df2`.
@@ -2268,12 +2268,12 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
   }
 }
 
-/// A function that compares two objects for sorting. It will return -1 if a
-/// should be ordered before b, 0 if a and b are equal wrt to ordering, and 1
-/// if a should be ordered after b.
+// A function that compares two objects for sorting. It will return -1 if a
+// should be ordered before b, 0 if a and b are equal wrt to ordering, and 1
+// if a should be ordered after b.
 typedef CustomComparator = int Function(Object? a, Object? b);
 
-/// A proxy object setup used to edit column data structure as rows via [][] operator.
+// A proxy object setup used to edit column data structure as rows via [][] operator.
 class RowIndexer<T> {
   DataFrameCore datacore;
   RowIndexer(this.datacore);
