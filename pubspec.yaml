@@ -1,7 +1,7 @@
 name: pdataframe
 description: A DataFrame implementation in Dart for data manipulation and analysis.
 repository: https://github.com/hyraxcore/pdataframe
-version: 0.0.2
+version: 0.0.3
 
 environment:
   sdk: ^3.4.4
