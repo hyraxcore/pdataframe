@@ -1,6 +1,5 @@
 /// The DataFrameCore<T> class is the foundational data structure for DataFrame 
 /// It handles data storage, column type management, and indexing mechanisms for both rows and columns. 
-
 class DataFrameCore<T> {
   // * Fields *
   String name = '';
@@ -96,33 +95,6 @@ class DataFrameCore<T> {
       }
       data[colIndex] = newList;
     }
-  }
-
-  /// Filters out null and NaN values from a specified column and returns a list of doubles.
-  /// - Parameters:
-  ///   - columnIndex: The index of the column to filter.
-  ///   - skipNull: If true, skips null values; if false, replaces nulls with 0.0.
-  List<double> filterNulls(var columnIndex, {bool skipNull = true}) {
-    final rawData = List.from(data[columnIndex]);
-    List<double> processedData;
-    if (skipNull == true) {
-      // Skip null values and convert to double
-      processedData = rawData
-          .whereType<num>()
-          .where((e) => !e.isNaN)
-          .map((e) => e.toDouble())
-          .toList();
-    } else {
-      // Replace null with 0.0 and convert to double
-      processedData = rawData.map((e) {
-        if (e is num) {
-          return (e is double && e.isNaN) ? 0.0 : e.toDouble();
-        } else {
-          return 0.0;
-        }
-      }).toList();
-    }
-    return processedData;
   }
 
   // * Index Manipulation Methods *

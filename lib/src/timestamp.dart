@@ -739,7 +739,7 @@ class Timestamp {
   String floor(String freq) {
     final freqUpper = freq.toUpperCase();
     switch (freqUpper) {
-      case 'D':return '$year-${month > 9 ? month : '0'+month.toString()}-${day.toString().padLeft(2, '0')}';
+      case 'D':return '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
       case 'H':return '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')} ${hour.toString().padLeft(2, '0')}';
       case 'T':return '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')} ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
       case 'S':return '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')} ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}:${second.toString().padLeft(2, '0')}';
@@ -1093,21 +1093,14 @@ class Timedelta extends Duration {
   final int nanoseconds;
 
   Timedelta({
-    int days = 0,
-    int hours = 0,
-    int minutes = 0,
-    int seconds = 0,
-    int milliseconds = 0,
-    int microseconds = 0,
+    super.days = 0,
+    super.hours = 0,
+    super.minutes = 0,
+    super.seconds = 0,
+    super.milliseconds = 0,
+    super.microseconds = 0,
     this.nanoseconds = 0,
-  }) : super(
-          days: days,
-          hours: hours,
-          minutes: minutes,
-          seconds: seconds,
-          milliseconds: milliseconds,
-          microseconds: microseconds,
-        );
+  });
 
   static final Timedelta zero = Timedelta();
 

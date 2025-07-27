@@ -3,8 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:csv/csv.dart';
 import 'data_core.dart';
-import 'series.dart';
+import 'dart:math' as math;
 import 'dfunctions.dart';
+import 'math_utils.dart';
+import 'timestamp.dart';
+import 'series.dart';
+part 'dataframe_math.dart';
 
 /// The main DataFrame class.
 class DataFrame {
@@ -178,15 +182,26 @@ class DataFrame {
       _dataCore.columnTypes.add(checkListType(column));
     }
     // 4.b. Convert columns of 'num' type to 'double'. Ensures numerical consistency across the DataFrame.
-    int numIndex = _dataCore.columnTypes.indexOf(num);
-    if (numIndex != -1) {
-      _dataCore.columnTypes[numIndex] = double;
-      List<double> tempList = [];
-      for (num e in _dataCore.data[numIndex]) {
-        tempList.add(e.toDouble());
-      }
-      _dataCore.data[numIndex] = tempList;
+int numIndex = _dataCore.columnTypes.indexOf(num);
+if (numIndex != -1) {
+  // mark column as double-based (you might still keep track of nullability separately)
+  _dataCore.columnTypes[numIndex] = double;
+
+  final rawCol = _dataCore.data[numIndex];
+  final temp   = <double?>[];
+
+  for (var x in rawCol) {
+    if (x is num) {
+      // ints, doubles, and double.nan → toDouble() (double.nan stays double.nan)
+      temp.add(x.toDouble());
+    } else {
+      // preserve actual nulls
+      temp.add(null);
     }
+  }
+
+  _dataCore.data[numIndex] = temp;
+}
     // 5. INITIALIZE ROW INDICES
     // 5.a. Validate the index size matches the number of rows
     if (index.isNotEmpty && index.length != inputData.values.first.length) {
@@ -1097,120 +1112,6 @@ class DataFrame {
     }
   }
 
-  // ** Mathematical Operations and Data Cleaning **
-  
-  /// Applies a mathematical function to all elements in a column.
-  ///
-  /// - Parameters:
-  ///   - colName: The name of the column to which the function is applied.
-  ///   - operation: The math function that is applied to all the elements of the column.
-  ///   - asList: (Optional, default false) If true, returns the calculations as a List.
-  ///   - inplace: (Optional, default false) If true, applies the math function to the current DataFrame. If false, applies the function on a returned copy.
-  ///
-  /// - Example:
-  ///   ```dart
-  ///   var df2 = df.m(0, (e)=>sqrt(e)); // Square roots each element in the column (function from dart:math).
-  ///   var df2 = df.m('ColumnName', (x) => x + 2); // Adds 2 to each element in the column.
-  ///   ```
-  m(var colName, double Function(num) operation, {bool asList = false, bool inplace = false}) {
-    if(asList == true && inplace == true){
-      throw ArgumentError('asList and inplace parameters cannot both be true');
-    }
-    List<num> list = (this[colName] as List).cast<num>();
-    List<double> newList = <double>[];
-    for (num e in list) {
-      newList.add(operation(e));
-    }
-    if(asList){
-      return newList;
-    }
-    if(inplace){
-      this[colName] = newList;
-      return;
-    } else {
-      var newdf = DataFrame._copyDataframe(this);
-      newdf[colName] = newList;
-      return newdf;
-    }
-  }
-
-  /// Counts the number of null or NaN values in a specified column.
-  ///
-  /// - Parameters:
-  ///   - colName: The name of the column to count null/NaN values.
-  ///
-  /// - Example:
-  ///   ```dart
-  ///   int nullCount = df.countNulls('ColumnName'); // Counts null/NaN values in the 'ColumnName' column.
-  ///   ```
-  int countNulls(var colName) {
-    final column = this[colName];  
-    int n = 0;
-    for(var e in column){
-      if(e == null || (e is double && e.isNaN)){
-        ++n;
-      }
-    }
-    return n;
-  }
-
-  /// Counts the number of zero values in a specified column.
-  ///
-  /// - Parameters:
-  ///   - colName: The name of the column in which to count zero values.
-  ///   - zeroValues: An optional list of values to be considered as zero. Default is `[0]`.
-  ///
-  /// - Example:
-  ///   ```dart
-  ///   int zeroCount = df.countZeros('ColumnName'); // Counts occurrences of 0 in the 'ColumnName' column.
-  ///   int customZeroCount = df.countZeros('ColumnName', zeroValues: [0, 0.0, 'zero']); // Counts occurrences of 0, 0.0, or 'zero'.
-  ///   ```
-  int countZeros(var colName, {List<Object> zeroValues = const <Object>[0]}) {
-    var dataInput = this[colName];
-    final n = countainsValues(dataInput, zeroValues);
-    return n;
-  }
-  /// Sums the values in a specified column.
-  /// 
-  /// - Example:
-  ///   ```dart
-  ///   double totalSum = df.sumCol(0); // Sums the values in the first column.
-  ///   ```
-  double sumCol(int columnIndex) {
-    return _dataCore.filterNulls(columnIndex)
-        .reduce((total, val) => total + val); // Sum non-null values in the column
-  }
-
-  /// Calculates the mean (average) of the values in a specified column.
-  /// 
-  /// - Example:
-  ///   ```dart
-  ///   double average = df.mean(0); // Calculates the mean of the first column.
-  ///   ```
-  double mean(int columnIndex) {
-    return sumCol(columnIndex) / _dataCore.filterNulls(columnIndex).length; // Divide the sum by the count of non-null values
-  }
-
-  /// Returns the maximum value in a specified column.
-  ///
-  /// - Example:
-  ///   ```dart
-  ///   double maxValue = df.max(0); // Gets the maximum value in the first column.
-  ///   ```
-  double max(int columnIndex) {
-    return _dataCore.filterNulls(columnIndex).reduce((a, b) => a > b ? a : b); // Find the maximum of the non-null values
-  }
-
-  /// Returns the minimum value in a specified column.
-  ///
-  /// - Example:
-  ///   ```dart
-  ///   double minValue = df.min(0); // Gets the minimum value in the first column.
-  ///   ```
-  double min(int columnIndex) {
-    return _dataCore.filterNulls(columnIndex).reduce((a, b) => a < b ? a : b);
-  }
-
   // ** DataFrame Utility Methods  **
 
   /// Resets the row index of the DataFrame to a default integer-based index.
@@ -2010,6 +1911,15 @@ class DataFrame {
 
     // 7. RETURN THE FINAL FORMATTED STRING
     return buffer.toString();
+  }
+
+  // * Private helpers
+
+  // Return a column index
+  int _colIndex(Object col) {
+    if (col is int) return col;
+    if (col is String) return columns.indexOf(col);
+    throw ArgumentError('col must be int or String');
   }
 }
 

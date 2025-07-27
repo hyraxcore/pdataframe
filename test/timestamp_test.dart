@@ -46,10 +46,7 @@ void main() {
       expect(ts3.is_month_end, equals(true));
     });
     test('String format: .strftime()', () {
-      var s1 = ts1.strftime('%d-%b-%Y');
-      print(s1);
       expect(ts1.strftime('%d-%b-%Y'), equals ('01-Jan-1999'));
-
     });
     test('Period conversion: to_period()', () {
       Timestamp ts = Timestamp(DateTime(2023, 12, 17, 14, 45, 30));
@@ -76,8 +73,6 @@ void main() {
       expect(rounds, 
         equals(['1999-02-06', '1999-02-06 09', '1999-02-06 08:47', '1999-02-06 08:46:40', '1999-02-06 08:46:39.501', '1999-02-06 08:46:39.500500', '1999-02-06 08:46:39.500500499'])
       );
-      var tsd = Timestamp("1999-01-03 08:44:50");
-      print(tsd.round('T'));
     }); 
   });
 }

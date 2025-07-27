@@ -282,32 +282,6 @@ void main() {
       expect(df['B'], equals(['Apple', 'apple', 'banana', 'pear'])); // Column B reordered
     });
   });
-  group('m() math tests', () {
-    late DataFrame df;
-    setUp(() {df = DataFrame([1, 4, 7], columns: ['A']);});
-    test('Test m() by multiplying first column values by 2, returning a new DataFrame', () {
-      var df2 = df.m('A', (e) => e * 2);
-      expect(df2['A'], equals([2.0, 8.0, 14.0]));  // The column values doubled and returned as a DataFrame
-      expect(df['A'], equals([1, 4, 7]));  // Original DataFrame unchanged
-    });
-    test('Test m() editing original DataFrame via inplace parameter', () {
-      var df2 = df.m('A', (e) => e * 2, inplace: true);
-      expect(df['A'], equals([2.0, 8.0, 14.0]));  // The column values doubled and returned as a DataFrame
-      expect(df2, isNull); // Check that when inplace is true, function doesn't return a value
-    });
-    test('Test m() with List return via asList = true', () {
-      final result = df.m('A', (e) => e * 2, asList: true);
-      expect(result, equals([2.0, 8.0, 14.0]));  // The column values doubled and returned as a list
-    });
-    test('Test m() with default behavior', () {
-      final newDf = df.m('A', (e) => e - 1);
-      expect(newDf['A'], equals([0.0, 3.0, 6.0]));  // The column values decremented by 1
-      expect(df['A'], equals([1, 4, 7]));  // Original DataFrame should be unchanged
-    });
-    test('Test m() throws ArgumentError for asList = true and inplace = true', () {
-      expect(() => df.m('A', (e) => e * 2, asList: true, inplace: true), throwsArgumentError);
-    });
-  });
   group('reset_index() tests', () {
     late DataFrame df;
     setUp(() {

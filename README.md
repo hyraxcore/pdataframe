@@ -1,6 +1,7 @@
 # pdataframe
 
 A DataFrame library for storing, manipulating, and analyzing data, using an interface similar to Python’s pandas.
+Designed for large datasets; key features include fast label-based access (`O(k)`) and support for duplicate labels. 
 
 ## Usage examples:
 
@@ -13,20 +14,21 @@ final dfList = DataFrame([[1,2,3],[4,5,6],[7,8,9]]);
 final dfMap = DataFrame({0:[1,4,7], 1:[2,5,8], 2:[3,6,9]});
 
 // List input Using parameters to set column/row names
-final df = DataFrame([[1,2,3.0],[4,5,6],[7,'hi',9]], index:['Dog','Dog','Cat'], columns:['a','b','c']); 
+final df = DataFrame([[1,2,3.0],[4,5,6],[7,'hi',9]], index:['Dog','Dog','Cat'], columns:['M','W','F']); 
 
 print(df);
-//     | a |   b  |  c
+//     | M |   W  |  F
 // --------------------  
 // Dog | 1 |   2  | 3.0   
 // Dog | 4 |   5  |  6
-// Cat | 7 | 'hi' |  9
+// Cat | 7 | 'no' |  9
 ```
 
 Verify column types
 ```dart
 print(df.dtypes); // [int, Object, Double]
 ```
+Note: For simplicity, `dtypes` does not distinguish between nullable and non-nullable types (e.g. int? shown as int). 
 
 Access a column of data
 ```dart
@@ -59,8 +61,9 @@ Add Data
 var newDf = concat([dfList, dfMap], axis:0); // 'axis:0' combines the columns 
 
 // Append a new row to a DataFrame 
-var newDf = df.append([[1,2,3]]); // Note: use parameter 'inplace:true' to modify current DataFrame
+var newDf = df.append([[1,2,3]], columns:['M','W','F']); 
 ```
+Note: Use parameter `inplace:true` to modify the current DataFrame
 
 Delete Data
 ```dart
@@ -92,11 +95,38 @@ var ts1 = Timestamp("February 9, 1999");
 ### Miscellaneous Functions
 These functions provide additional flexibility and allow for fine-tuning specific behaviors. 
 
-- Basic Aggregation Methods: min(), max(), mean(),
-- `reset_index()`: Resets the row index of the DataFrame to a default integer-based index.
-- `sort()`: Sorts the DataFrame rows by a specified column.
-- `head()`: Returns the first N rows of the DataFrame.
-- `info()`: Prints and returns a summary of the DataFrame, including the column index, name, non-null count, and data type.
-- `table()`: Converts the entire DataFrame to a list of rows, optionally including the row index as the first column.
+#### DataFrame Utilities
+- `reset_index()` – Resets the row index of the DataFrame to a default integer-based index.
+- `sort()` – Sorts the DataFrame rows by a specified column.
+- `head()` – Returns the first N rows of the DataFrame.
+- `info()` – Prints and returns a summary of the DataFrame, including the column index, name, non-null count, and data type.
+- `table()` – Converts the entire DataFrame to a list of rows, optionally including the row index as the first column.
+
+#### Data Cleaning & Filtering
+`filterNulls()`, `countNulls()`, `countZeros()`, `interpolate()`, `knnImputer()`
+
+#### Descriptive Statistics
+`sumCol()`, `mean()`, `max()`, `min()`, `rollingMad()`, `weightedQuantile()`, `weightedHistogram()`
+
+#### Rolling & Expanding Windows
+`rollingSum()`, `rollingMean()`, `rollingStd()`, `rollingApply()`, `expandingMin()`, `expandingMax()`, `expandingMean()`, `expandingVar()`
+
+#### Grouping & Reshaping
+`groupBy()`, `pivotTable()`, `melt()`, `resample()`
+
+#### Time Series Analysis
+`autocorrelation()`, `partialAutocorrelation()`, `seasonalDecompose()`, `exponentialSmoothing()`
+
+#### Statistical Tests
+`tTest()`, `anova()`, `chiSquare()`, `bootstrap()`
+
+#### Linear Algebra & Decomposition
+`covarianceMatrix()`, `pca()`, `svd()`
+
+#### Signal Processing
+`fft()`, `convolve()`, `crossCorrelate()`
+
+#### Outlier Detection
+`outlierIQR()`, `outlierZScore()`, `localOutlierFactor()`
 
 For more details, refer to the full documentation or the code comments.
