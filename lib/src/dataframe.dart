@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -182,26 +183,23 @@ class DataFrame {
       _dataCore.columnTypes.add(checkListType(column));
     }
     // 4.b. Convert columns of 'num' type to 'double'. Ensures numerical consistency across the DataFrame.
-int numIndex = _dataCore.columnTypes.indexOf(num);
-if (numIndex != -1) {
-  // mark column as double-based (you might still keep track of nullability separately)
-  _dataCore.columnTypes[numIndex] = double;
-
-  final rawCol = _dataCore.data[numIndex];
-  final temp   = <double?>[];
-
-  for (var x in rawCol) {
-    if (x is num) {
-      // ints, doubles, and double.nan → toDouble() (double.nan stays double.nan)
-      temp.add(x.toDouble());
-    } else {
-      // preserve actual nulls
-      temp.add(null);
+    int numIndex = _dataCore.columnTypes.indexOf(num);
+    if (numIndex != -1) {
+      // mark column as double-based (you might still keep track of nullability separately)
+      _dataCore.columnTypes[numIndex] = double;
+      final rawCol = _dataCore.data[numIndex];
+      final temp   = <double?>[];
+      for (var x in rawCol) {
+        if (x is num) {
+          // ints, doubles, and double.nan → toDouble() (double.nan stays double.nan)
+          temp.add(x.toDouble());
+        } else {
+          // preserve actual nulls
+          temp.add(null);
+        }
+      }
+      _dataCore.data[numIndex] = temp;
     }
-  }
-
-  _dataCore.data[numIndex] = temp;
-}
     // 5. INITIALIZE ROW INDICES
     // 5.a. Validate the index size matches the number of rows
     if (index.isNotEmpty && index.length != inputData.values.first.length) {
@@ -1030,7 +1028,7 @@ if (numIndex != -1) {
   ///   var sortedDf = df.sort('B', inplace: false); // Sorts by column 'B' and returns a new DataFrame.
   ///   df.sort('C', comparator: (a, b) => a == null ? -1 : a.compareTo(b), inplace: true); // Sorts in-place by 'C', with custom handling for nulls.
   ///   ```
-  DataFrame sort(
+ DataFrame sort(
     var colName,
     {bool inplace = true,
     bool nullIsFirst = true,
@@ -1060,10 +1058,8 @@ if (numIndex != -1) {
         return ascending ? comparison : -comparison;  // Adjust for ascending/descending
       });
     }
-
     // Reorder each column of the matrix according to newIndexOrder 
-    var newDf = iloc(row: newIndexOrder); // iloc returns a df when input is list
-
+    var newDf = iloc[newIndexOrder]; // iloc returns a df when input is list
     // Handle in-place sorting
     if (inplace) {
       _dataCore.data = newDf._dataCore.data;
@@ -1111,6 +1107,7 @@ if (numIndex != -1) {
       throw ArgumentError('Value in column cannot be compared');
     }
   }
+
 
   // ** DataFrame Utility Methods  **
 
@@ -1203,135 +1200,28 @@ if (numIndex != -1) {
 
   // ** Data retrieval methods **
 
-  /// Retrieves or edits rows and columns based on specified indices or ranges.
-  /// Multiple rows can be returned by providing a list of indices or a range, e.g., [2,5] returns rows 3 through 6, and [2,null] returns all rows after row 2.
+  /// Provides integer‐location based retrieval, slicing, and editing of DataFrame.
   ///
   /// - Parameters:
-  ///   - row: (Required) The row index, list of indices, or map defining a range of rows to retrieve. Supports int, String, List, or Map.
-  ///   - col: (Optional) The column index or range. If null, defaults to all columns.
-  ///   - edit: (Optional) Value used to update the specified rows/columns.
+  ///   - row: (Required) The row index. Map and List provide two additional functions:
+  ///          Map: specify and return a contiguous range of rows (start inclusive, end exclusive).
+  ///          List: return a DataFrame with rows reordered according to the specified list of integer indices.
+  ///   - col: (Optional) The column index. Map and List provide two additional functions:
+  ///          Map: specify a contiguous range of columns (start inclusive, end exclusive).
+  ///          List: return columns reordered according to the specified list of integer indices.
+  ///          Defaults to all columns if not provided or null.
   ///
-  /// - Example:
+  /// - Examples:
   ///   ```dart
-  ///   var row = df.iloc(row: 2); // Returns the row at index 2.
-  ///   var rangeDf = df.iloc(row: {0: 2}, col: {1: null}); // Returns a DataFrame with rows 0 to 1 and all columns starting from 1.
-  ///   df.iloc(row: 1, col: 2, edit: 'newValue'); // Updates row 1, column 2 with 'newValue'.
-  ///   df.iloc(row: 3, edit: 'newValue'); // Updates all elements in row 3 with 'newValue'.
+  ///   var row   = df.iloc[2];                   // Get row at index 2.
+  ///   var cell  = df.iloc[1][3];                // Get cell at row 1, column 3.
+  ///   df.iloc[1][3] = 42;                       // Set that cell.
+  ///   df.iloc[2] = ['Alice', 123, true];        // Replace entire row 2.
+  ///   var sub1  = df.iloc[[0, 2]];              // Rows 0 and 2, all columns.
+  ///   var sub2 = df.iloc[{null:3}][{1:null}];   // Rows 0–2, columns 1 to last
+  ///   var sub3  = df.iloc[{1:4}][[3, 0, 2]];    // Rows 1–3, cols 3,0,2.
   ///   ```
-  iloc({required row, var col, var edit}) {
-    var dataCore = _dataCore.data;
-    // 1. STANDARD OPERATION: ROW IS A NON-MAP VALUE
-    // 1.a. If 'row' is a non-Map value (int or String), retrieve or edit a single row
-    if ((row is int || row is String) && row is! Map) {
-      int rowIndex = row is String ? int.parse(row) : row;
-      // 1.b. If 'col' and 'edit' are not provided, return the entire row as a List
-      if (col == null && edit == null) {
-        List<dynamic> newRow = [];
-        for (int i = 0; i < dataCore.length; i++) {
-          var element = dataCore[i][rowIndex];
-          Type columnType = dtypes[i];
-          // Ensure type consistency for elements of 'Object' type
-          if (columnType == Object && (element is int || element is double)) {
-            newRow.add(element.runtimeType == int ? element.toInt() : element.toDouble());
-          } else {
-            newRow.add(element);
-          }
-        }
-        return newRow;
-      }
-      // 1.c. If 'col' is specified, access or edit a specific cell in the DataFrame
-      if (col is int) {
-        if (edit != null) {
-          // 1.c.i. Update the element if 'edit' is provided
-          dataCore[col][rowIndex] = edit;
-          return '';
-        } else {
-          // 1.c.ii. Return the element at the specified row and column
-          return dataCore[col][rowIndex];
-        }
-      }
-      // 1.d. If 'col' is not specified but 'edit' is, update the entire row
-      if (col == null) {
-        // 1.d.i. If 'edit' is not a List, apply the same value to all columns in the row
-        if (edit != null && (edit is! List && edit is! Iterable)) {
-          for (int i = 0; i < dataCore.length; i++) {
-            dataCore[i][rowIndex] = edit;
-          }
-          return '';
-        // 1.d.ii. If 'edit' is a List/Iterable, update the row with the new values
-        } else if (edit != null && (edit is List || edit is Iterable)) {
-          if (dataCore.length != edit.length) {
-            throw ArgumentError('Number of values in new data must equal the number of columns in the dataframe');
-          }
-          int counter = 0;
-          for (var e in edit) {
-            dataCore[counter][rowIndex] = e;
-            ++counter;
-          }
-          return '';
-        }
-      }
-    }
-    // 2. ROW IS A LIST: REORDER OR SELECT SPECIFIC ROWS
-    // 2.a. If 'row' is a List, use reverse mapping to reorder or select rows by indices
-    if (row is List) {
-      Map reverseRowKV = _dataCore.reverseMap(_dataCore.rowIndexMap);
-      List newData = [];
-      List newRowIndices = [];
-      for (var e in row) {
-        if (e is int) {
-          newRowIndices.add(reverseRowKV[e]);
-          newData.add(dataCore.map((column) => column[e]).toList());
-        } else {
-          throw ArgumentError('List elements must be integers');
-        }
-      }
-      // 2.b. Return a new DataFrame with the selected rows
-      return DataFrame(newData, index: newRowIndices, columns: columns);
-    }
-    // 3. ROW IS A MAP: SUBLIST SELECTION FOR ROWS AND COLUMNS
-    // 3.a. If 'row' is a Map with a single key-value pair, get a sublist of rows and columns
-    if (row is Map && row.length == 1) {
-      // 3.b. Extract the row range (start and end)
-      List<int> rowRange = [row.keys.first ?? 0, row.values.first ?? _dataCore.rowLastIndexVal+1];
-      // 3.c. Default to all columns if 'col' is null
-      List<int> colRange;
-      col ??= {0: _dataCore.data[0].length};
-      if (col is Map && col.length == 1) {
-        colRange = [col.keys.first ?? 0, col.values.first ?? _dataCore.columnLastIndexVal+1];
-      } else {
-        throw ArgumentError('Invalid column input. Must be a Map with one key-value pair.');
-      }
-      // 3.d. Validate the specified row and column ranges
-      if (rowRange.any((r) => r < 0 || r >= _dataCore.data.length + 1) ||
-          colRange.any((c) => c < 0 || c >= _dataCore.data[0].length + 1)) {
-        throw ArgumentError('Invalid row or column range.');
-      }
-      // 3.e. Extract the specified submatrix based on the row and column ranges
-      List<List> newData = [];
-      for (int i = rowRange[0]; i <= rowRange[1] - 1; i++) {
-        List rowToAdd = [];
-        for (int j = colRange[0]; j <= colRange[1] - 1; j++) {
-          rowToAdd.add(_dataCore.data[j][i]);
-        }
-        newData.add(rowToAdd);
-      }
-      // 3.f. Retrieve the new row and column names based on the ranges
-      List newRows = index.sublist(rowRange[0], rowRange[1]);
-      List newColumns = columns.sublist(colRange[0], colRange[1]);
-      // 3.g. Return a new DataFrame with the sublist of rows and columns
-      return DataFrame(newData, index: newRows, columns: newColumns);
-    }
-    // 4. INVALID INPUT CASE: THROW ERROR - If no valid input type or range is matched, throw an error
-    throw ArgumentError('Invalid input type or range.');
-  }
-  /// Edit data in a row using [][] operators.
-  /// - Example:
-  ///   ```dart
-  ///   df.editRow['City']['Temperature] = 20; // Edit the row City and the column Temperature to the value of 20
-  ///   df.editRow['City'] = [20, 43, 'London']; // Edit the row data for 'City'
-  ///   ```
-  RowIndexer get editRow => RowIndexer(_dataCore);
+  IlocIndexer get iloc => IlocIndexer(this);
 
   /// Retrieves rows and columns based on specified names or ranges, with the option to edit data.
   ///
@@ -2183,60 +2073,165 @@ DataFrame concat(List input, {int axis = 0, String join = 'outer', bool ignore_i
 // if a should be ordered after b.
 typedef CustomComparator = int Function(Object? a, Object? b);
 
-// A proxy object setup used to edit column data structure as rows via [][] operator.
-class RowIndexer<T> {
-  DataFrameCore datacore;
-  RowIndexer(this.datacore);
 
-  RowView<T> operator [](final rowIndex) {
-    if( rowIndex.runtimeType == int){
-      return RowView<T>(rowIndex, datacore);
-    } else{
-      var rowIndexS = datacore.rowIndexMap[rowIndex].first;
-      return RowView<T>(rowIndexS, datacore);
-    } 
+
+// * iloc row view/edit proxies
+
+class IlocIndexer {
+  final DataFrame df;
+  IlocIndexer(this.df);
+  // df.iloc2[key]
+  // - int             - IlocRow proxy for single‐row access
+  // - List<int>       - DataFrame(rows=that list, all columns)
+  // - Map<int?,int?>  - IlocSlice proxy for slicing
+  dynamic operator [](dynamic key) {
+    // 1) single-row proxy
+    if (key is int) {
+      return IlocRow(df, key);
+    }
+
+    // 2. list of row‐indices: DataFrame(rows=key, all cols)
+    if (key is List && key.every((e) => e is int)) {
+      final rev     = df._dataCore.reverseMap(df._dataCore.rowIndexMap);
+      final newIdx  = <dynamic>[];
+      final newData = <List<dynamic>>[];
+      for (var r in key.cast<int>()) {
+        newIdx.add(rev[r]);
+        newData.add(df._dataCore.data.map((col) => col[r]).toList());
+      }
+      return DataFrame(newData, index: newIdx, columns: df.columns);
+    }
+    // 3. map‐based row slice: IlocSlice for columns next
+    if (key is Map && key.length == 1) {
+      final rawStart = key.keys.first  as int?;
+      final rawEnd   = key.values.first as int?;
+      final start = rawStart ?? 0;
+      final end   = rawEnd   ?? (df._dataCore.rowLastIndexVal + 1);
+      final total = df._dataCore.rowLastIndexVal + 1;
+      if (start < 0 || end > total || start > end) {
+        throw ArgumentError('Invalid row range: {$rawStart:$rawEnd}');
+      }
+      return IlocSlice(df, start, end);
+    }
+
+    throw ArgumentError('Invalid iloc2 key: $key');
   }
-  void operator []=(int rowIndex, List newRow) {
-    int counter = 0;
-    if( rowIndex.runtimeType == String){
-      rowIndex = datacore.rowIndexMap[rowIndex].first;
+
+  // df.iloc[key] = value
+  // - if key is int:  assign entire row (value must be List)
+  // - if key is List<int>: assign multiple rows (value must be List<List>)
+  void operator []=(dynamic key, dynamic value) {
+    // a) multi‐row assignment
+    if (key is List && key.every((e) => e is int) && value is List) {
+      final rows    = key.cast<int>();
+      final newRows = value as List;
+      final nCols   = df._dataCore.data.length;
+      if (rows.length != newRows.length) {
+        throw ArgumentError(
+          'Number of target rows (${rows.length}) must match number of newRows (${newRows.length})'
+        );
+      }
+      for (var i = 0; i < rows.length; i++) {
+        final r       = rows[i];
+        final rowVals = newRows[i];
+        if (rowVals is! List || rowVals.length != nCols) {
+          throw ArgumentError('Each new row must be a List of length $nCols');
+        }
+        for (var c = 0; c < nCols; c++) {
+          df._dataCore.data[c][r] = rowVals[c];
+        }
+      }
+      return;
     }
-    for(var i = 0; i < datacore.data.length; i++){ 
-      datacore.addEditType(input: newRow[counter], colIndex: counter, rowIndex: rowIndex);
-      counter++;
+    // b) single‐row assignment
+    if (key is int && value is List) {
+      final cols = df._dataCore.data;
+      if (value.length != cols.length) {
+        throw ArgumentError('New row must match column count');
+      }
+      for (var c = 0; c < cols.length; c++) {
+        df[df.columns[c]][key] = value[c];
+      }
+      return;
     }
+    throw ArgumentError('Invalid iloc2 assignment: $key');
   }
 }
 
-class RowView<T> {
-  final rowIndex;
-  final DataFrameCore datacore;
+// Proxy used for re-ordering and slices, e.g. df.iloc[{r0:r1}][...]
+class IlocSlice {
+  final DataFrame df;
+  final int rowStart, rowEnd; // end‐exclusive
+  IlocSlice(this.df, this.rowStart, this.rowEnd);
+  DataFrame operator [](dynamic colKey) {
+    // 1. column slice via Map<int?,int?>
+    if (colKey is Map && colKey.length == 1) {
+      final rawC0 = colKey.keys.first  as int?;
+      final rawC1 = colKey.values.first as int?;
+      final c0 = rawC0 ?? 0;
+      final c1 = rawC1 ?? (df._dataCore.columnLastIndexVal + 1);
+      final nRows = df._dataCore.data[0].length;
+      final nCols = df._dataCore.data.length;
+      if (rowStart < 0 || rowEnd > nRows || c0 < 0 || c1 > nCols || c0 > c1) {
+        throw ArgumentError('Invalid column range: {$rawC0:$rawC1}');
+      }
+      final out = <List<dynamic>>[];
+      for (var r = rowStart; r < rowEnd; r++) {
+        final buf = <dynamic>[];
+        for (var c = c0; c < c1; c++) {
+          buf.add(df._dataCore.data[c][r]);
+        }
+        out.add(buf);
+      }
+      final newIdx  = df.index.sublist(rowStart, rowEnd);
+      final newCols = df.columns.sublist(c0, c1);
+      return DataFrame(out, index: newIdx, columns: newCols);
+    }
 
-  RowView(this.rowIndex, this.datacore);
-  int get length => datacore.data.length;
-  
-  T operator [](var columnIndex) {  
-    if( columnIndex.runtimeType == int){
-      return datacore.data[columnIndex][rowIndex];
-    } else{
-      var columnIndexS = datacore.columnIndexMap[columnIndex].first;
-      return datacore.data[columnIndexS][rowIndex];
-    } 
-    //return dfcore.data[columnIndex][rowIndex];
+    // 2. reordered columns via List<int>
+    if (colKey is List && colKey.every((e) => e is int)) {
+      final colsList = colKey.cast<int>();
+      final nCols    = df._dataCore.data.length;
+      for (var c in colsList) {
+        if (c < 0 || c >= nCols) {
+          throw ArgumentError('Column index out of bounds: $c');
+        }
+      }
+      final out = <List<dynamic>>[];
+      for (var r = rowStart; r < rowEnd; r++) {
+        final buf = <dynamic>[];
+        for (var c in colsList) {
+          buf.add(df._dataCore.data[c][r]);
+        }
+        out.add(buf);
+      }
+      final newIdx  = df.index.sublist(rowStart, rowEnd);
+      final newCols = colsList.map((c) => df.columns[c]).toList();
+      return DataFrame(out, index: newIdx, columns: newCols);
+    }
+    throw ArgumentError('Invalid column key: $colKey');
   }
-  void operator []=(var columnIndex, var value) {
-    if( columnIndex.runtimeType == int){
-      //return datacore.data[columnIndex][rowIndex];
-      datacore.addEditType(input: value, colIndex: columnIndex, rowIndex: rowIndex);
-    } else{
-      var columnIndexS = datacore.columnIndexMap[columnIndex].first;
-      // return datacore.data[columnIndexS][rowIndex];
-      datacore.addEditType(input: value, colIndex: columnIndexS, rowIndex: rowIndex);
-    } 
-    //datacore.addEditType(input: value, colIndex: columnIndex, rowIndex: rowIndex);
-  }
-  @override
-  String toString() {
-    return [for (var column in datacore.data) column[rowIndex]].toString(); 
+}
+
+// Proxy for cell read/write, e.g. df.iloc[3][5], df.iloc[3][5] = newValue
+class IlocRow extends ListBase<dynamic> {
+  final DataFrame df;
+  final int row;
+  IlocRow(this.df, this.row);
+
+  @override int get length => df._dataCore.data.length;
+  @override set length(int _) => throw UnsupportedError('Cannot resize iloc row');
+  @override dynamic operator[](int col) => df._dataCore.data[col][row];
+  @override void operator[]=(int col, dynamic value) {
+    final colName = df.columns[col];
+    if (value.runtimeType != df.dtypes[col]) {
+      df._dataCore.addEditType(
+        input: value,
+        colIndex: col,
+        rowIndex: row,
+      );
+    } else {
+      df[colName][row] = value;
+    }
   }
 }

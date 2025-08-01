@@ -45,14 +45,11 @@ Edit data (multiple methods)
 // Edit data via columns
 df['a'][2] = [30];
 
-// Edit row using iloc(); the row is called using it's integer index
-df.iloc(row: 2, col:'a', edit: 30); 
+// Edit a single cell by integer position (row 2, column 0)
+df.iloc[2][0] = 30;  
 
-// Edit row using loc(); the row is called using it's row name
-df.iloc(row: 'Cat', col:'a', edit: 30); 
-
-// Edit row using editRow(); the row data modified using [] operators
-df.editRow['Cat']['a'] = 30; 
+// Edit a single cell by label (row 'Cat', column 'a')
+df.loc['Cat']['a'] = 30;
 ```
 
 Add Data

@@ -34,7 +34,7 @@ extension DataFrameMath on DataFrame{
     for (var i = 0; i < keys.length; i++) {
       idxs.putIfAbsent(keys[i]!, () => []).add(i);
     }
-    // transform → one output per original row
+    // transform -> one output per original row
     if (transform != null) {
       final out = List<double>.filled(keys.length, double.nan);
       idxs.forEach((k, list) {
@@ -49,7 +49,7 @@ extension DataFrameMath on DataFrame{
       index: this.index,  // preserve original row labels
      );
     }
-    // aggregate → one row per group
+    // aggregate -> one row per group
     else if (aggregate != null) {
       final rows = <List<Object?>>[];
       idxs.forEach((k, list) {
@@ -58,7 +58,7 @@ extension DataFrameMath on DataFrame{
       });
       return DataFrame(rows, columns: [byColName, valueColName!]);
     }
-    // filter → keep only rows in groups passing the test
+    // filter -> keep only rows in groups passing the test
     else if (filter != null) {
       final keep = <int>[];
       idxs.forEach((k, list) {
@@ -66,8 +66,23 @@ extension DataFrameMath on DataFrame{
           keep.addAll(list);
         }
       });
-      // select by a list of row‐indices
-      return iloc(row: keep);
+
+      // build a List<List> of just the kept rows
+      final rows = keep
+        .map((r) => iloc[r].toList())       // grab row r as a List
+        .toList();
+
+      // grab the corresponding row labels
+      final newIndex = keep
+        .map((r) => index[r])
+        .toList();
+
+      // reconstruct the DataFrame
+      return DataFrame(
+        rows,
+        index: newIndex,
+        columns: columns,
+      );
     }
     else {
       throw ArgumentError('Must supply transform, filter, or aggregate');

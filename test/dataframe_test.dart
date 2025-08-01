@@ -343,41 +343,53 @@ void main() {
       df = DataFrame([[1, 4, 7],[2, 5, 8],[3, 6, 9]],index: ['row1', 'row2', 'row3'],columns: ['A', 'B', 'C']);
     });
     test('Retrieve a single row by integer index', () {
-      final row = df.iloc(row: 1);
-      expect(row, equals([2, 5, 8]));  // Retrieves the second row
-    });
-    test('Retrieve a specific cell by row and column indices', () {
-      final cell = df.iloc(row: 1, col: 2);
-      expect(cell, equals(8));  // Retrieves the cell in the second row, third column
+      final row = df.iloc[1];
+      expect(row, equals([2, 5, 8]));
     });
     test('Edit a single cell by row and column indices', () {
-      df.iloc(row: 1, col: 2, edit: 10);
-      expect(df.iloc(row: 1, col: 2), equals(10));  // Confirms the cell was updated
+      df.iloc[1][2] = 10;
+      expect(df.iloc[1][2], equals(10));
+    });
+    test('Edit a single cell via row proxy', () {
+      df.iloc[1][1] = 'hi';
+      expect(df.iloc[1][1], equals('hi'));
     });
     test('Edit entire row with a single value', () {
-      df.iloc(row: 1, edit: 99);
-      expect(df.iloc(row: 1), equals([99, 99, 99]));  // The entire row is set to 99
+      df.iloc[1] = [99, 99, 99];
+      expect(df.iloc[1], equals([99, 99, 99]));
     });
     test('Edit entire row with a list of values', () {
-      df.iloc(row: 1, edit: [20, 25, 30]);
-      expect(df.iloc(row: 1), equals([20, 25, 30]));  // Row updated with the provided values
+      df.iloc[1] = [20, 25, 30];
+      expect(df.iloc[1], equals([20, 25, 30]));
     });
     test('Retrieve multiple rows by list of indices', () {
-      final resultDf = df.iloc(row: [0, 2]);
+      final resultDf = df.iloc[[0, 2]];
       expect(resultDf.index, equals(['row1', 'row3']));
-      expect(resultDf['A'], equals([1, 3]));  // Only rows at indices 0 and 2 are selected
+      expect(resultDf['A'], equals([1, 3]));
+    });
+    test('Retrieve a single column after row selection', () {
+      final resultDf = df.iloc[[0, 2]][['A']];
+      expect(resultDf.columns, equals(['A']));
+      expect(resultDf['A'], equals([1, 3]));
+    });
+    test('Retrieve first row and all but first column', () {
+      final resultDf = df.iloc[{null: 1}][{1: null}];
+      expect(resultDf.index, equals(['row1']));
+      expect(resultDf.columns, equals(['B', 'C']));
+      expect(resultDf['B'], equals([4]));
+      expect(resultDf['C'], equals([7]));
     });
     test('Retrieve a submatrix with specified row and column ranges', () {
-      final resultDf = df.iloc(row:{1: 3}, col: {1: null});
-      expect(resultDf.index, equals(['row2', 'row3']));  // Rows 1 to 2 
-      expect(resultDf.columns, equals(['B', 'C']));  // Columns starting from index 1
-      expect(resultDf['B'], equals([5, 6]));  // Check the specific values in the submatrix
+      final resultDf = df.iloc[{1: 3}][{1: null}];
+      expect(resultDf.index, equals(['row2', 'row3']));
+      expect(resultDf.columns, equals(['B', 'C']));
+      expect(resultDf['B'], equals([5, 6]));
     });
     test('Retrieve sublist with invalid column range', () {
-      expect(() => df.iloc(row: {0: 2}, col: {1: 3, 2:3}), throwsArgumentError); // Throws error when column range is invalid
+      expect(() => df.iloc[{0: 2}][{1: 3, 2: 3}], throwsArgumentError);
     });
     test('Edit entire row with a list that doesn’t match column count', () {
-      expect(() => df.iloc(row: 1, edit: [20, 25]), throwsArgumentError); // Mismatched edit list length
+      expect(() => df.iloc[1] = [20, 25], throwsArgumentError);
     });
   });
   group('loc() tests', () {
@@ -573,20 +585,6 @@ void main() {
     });
     test('Throws error for unsupported input type', () {
       expect(() => df.append(123), throwsException); // Input type not supported
-    });
-  });
-  group('editRow() tests', () {
-    late DataFrame df;
-    setUp(() {
-      df = DataFrame([[1, 4, 7],[2, 5, 8],[3, 6, 9], [10,11,12]],index: ['row1','row2','row3','row4'],columns: ['A', 'B', 'C']);
-    });
-    test('Edit a single value in a row', () {
-      df.editRow[0][1] = 30.5; // Edit single value using integer row 0 and integer column 1 
-      expect(df.iloc(row:0), equals([1,30.5,7]));  
-      df.editRow['row2']['A'] = 'test';  // Edit single value using row name and column name
-      expect(df.iloc(row:1), equals(['test',5.0,8]));
-      df.editRow[2] = [88,77,66]; // Edit an entire row
-      expect(df.iloc(row:2), equals([88,77.0,66]));
     });
   });
 }
