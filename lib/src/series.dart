@@ -1,3 +1,5 @@
+import 'package:pdataframe/src/dfunctions.dart';
+
 import 'data_core.dart';
 
 //NOTE: Series type is not currently necessary. Left for experimental purposes, will consider removing in future revisions. 
@@ -31,7 +33,7 @@ class Series<T> {
         if(column is! List){
           _dataCore.columnTypes.add(column.runtimeType);
         } else {
-          _dataCore.columnTypes.add(checkListType(column));
+          _dataCore.columnTypes.add(checkListGenericType(column));
         }
       }
 
@@ -39,7 +41,7 @@ class Series<T> {
       if(index.isEmpty){
         if(inputData is List ){ index = List.generate(inputData.length, (i) => i);}
       }
-      _dataCore.indexer(index, true);
+      _dataCore.addToIndex(index, true);
       //2.a. For Map input
     } else if (inputData is Map) {
       //pandas allows but throws all data out and fills with 'NaN'
@@ -55,11 +57,11 @@ class Series<T> {
         if(column is! List){
           _dataCore.columnTypes.add(column.runtimeType);
         } else {
-          _dataCore.columnTypes.add(checkListType(column));
+          _dataCore.columnTypes.add(checkListGenericType(column));
         }
       }
       //2.d. Add index
-      _dataCore.indexer(inputData.keys, true);
+      _dataCore.addToIndex(inputData.keys, true);
     } else {
       throw ArgumentError('Invalid input data format');
     }

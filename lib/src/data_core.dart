@@ -1,3 +1,6 @@
+import 'dfunctions.dart';
+import 'nlist.dart';
+
 /// The DataFrameCore<T> class is the foundational data structure for DataFrame 
 /// It handles data storage, column type management, and indexing mechanisms for both rows and columns. 
 class DataFrameCore<T> {
@@ -5,6 +8,7 @@ class DataFrameCore<T> {
   String name = '';
   List data = [];
   List<Type> columnTypes = <Type>[]; // columnTypes saves List generics because Dart does not store inner generics at runtime
+  
   Map rowIndexMap = {};
   Map columnIndexMap = {};
   int rowLastIndexVal = -1;
@@ -104,7 +108,7 @@ class DataFrameCore<T> {
   ///   - inputIndex: An iterable of new index names.
   ///   - isColumn: If true, adds to column index map; if false, to row index map.
   ///   - resetIndex: If true, clears existing indices before adding new ones.
-  void indexer(Iterable inputIndex, bool isColumn, {bool resetIndex = false}) {
+  void addToIndex(Iterable inputIndex, bool isColumn, {bool resetIndex = false}) {
     Map indexed = isColumn ? columnIndexMap : rowIndexMap;
     int lastIndexVal = isColumn ? columnLastIndexVal : rowLastIndexVal;
     if (resetIndex == true) {
@@ -146,7 +150,7 @@ class DataFrameCore<T> {
   ///   - isColumn: If true, edits column index map; if false, edits row index map.
   ///   - select: When 0, deletes all indices with indexName; otherwise, deletes the nth occurrence.
   ///   - moveTo: Requires select; moves deleted index to the specified position.
-  void editIndices({
+  void editIndex({
     required var indexName,
     required bool isColumn,
     int select = 0,
@@ -262,40 +266,47 @@ class DataFrameCore<T> {
   // * Type Inference Methods *
 
   /// Scans a list and infers the types of columns, updating `columnTypes`.
-  void scanTypes(var inputList) {
-    // Assumes inputList is an iterable of lists (columns)
-    if (inputList is List && inputList is! String) {
-      int columnCounter = 0;
-      for (var column in inputList) {
-        Set<Type> typesInColumn = {};
-        int elementCounter = 0;
-        while (elementCounter < column.length) {
-          typesInColumn.add(column[elementCounter].runtimeType);
-          ++elementCounter;
-        }
-        // Determine column type based on collected types
-        if (typesInColumn.contains(int) && typesInColumn.contains(double)) {
-          columnTypes[columnCounter] = double;
-        } else if (typesInColumn.every((e) => e == int)) {
-          columnTypes[columnCounter] = int;
-        } else if (typesInColumn.every((e) => e == double)) {
-          columnTypes[columnCounter] = double;
-        } else if (typesInColumn.every((e) => e == String)) {
-          columnTypes[columnCounter] = String;
-        } else {
-          columnTypes[columnCounter] = Object;
-        }
-        ++columnCounter;
-      }
-    }
-  }
+  // Used only when a new list is entered.
+  //TODO DELETE, not being used
+  // void scanTypes(var inputList) {
+  //   // //TODO: if nList 
+  //   // if(inputList is NList){
+  //   //   columnTypes[columnCounter] = double;
+  //   //   return;
+  //   // }
+  //   // If inputList is a List
+  //   if (inputList is List && inputList is! String) {
+  //     int columnCounter = 0;
+  //     for (var element in inputList) {
+  //       Set<Type> typesInColumn = {};
+  //       int elementCounter = 0;
+  //       while (elementCounter < element.length) {
+  //         typesInColumn.add(element[elementCounter].runtimeType);
+  //         ++elementCounter;
+  //       }
+  //       // Determine column type based on collected types
+  //       if (typesInColumn.contains(int) && typesInColumn.contains(double)) {
+  //         columnTypes[columnCounter] = double;
+  //       } else if (typesInColumn.every((e) => e == int)) {
+  //         columnTypes[columnCounter] = int;
+  //       } else if (typesInColumn.every((e) => e == double)) {
+  //         columnTypes[columnCounter] = double;
+  //       } else if (typesInColumn.every((e) => e == String)) {
+  //         columnTypes[columnCounter] = String;
+  //       } else {
+  //         columnTypes[columnCounter] = Object;
+  //       }
+  //       ++columnCounter;
+  //     }
+  //   }
+  // }
 
   // * Utility Methods *
 
   /// Resets row indices to default integer values starting from zero.
   void reset_index() {
     var newList = List<dynamic>.generate(rowLastIndexVal + 1, (i) => i);
-    indexer(newList, false, resetIndex: true);
+    addToIndex(newList, false, resetIndex: true);
   }
 
   /// Reverses a map by swapping its keys and values.
@@ -478,140 +489,225 @@ class DataFrameCore<T> {
   /// Replaces an entire column of data. If multiple columns share the same name, 
   /// they will all be replaced with the same List argument.
   void operator []=(var columnName, List inputData) {
-    // Check that the input data length matches the number of rows
-    if (inputData.length != rowLastIndexVal + 1) {
+    final int n = rowLastIndexVal + 1;
+    if (inputData.length != n) {
       throw ArgumentError('Input data must match number of rows');
     }
-    
+
     Type newType;
-    // Check if inputData is explicitly typed
-    bool isExplicitlyTyped = inputData is List<int> ||
-                            inputData is List<double> ||
-                            inputData is List<String> ||
-                            inputData is List<bool> ||
-                            inputData is List<num>;
-    // Case 1: Generic is an explicit type 
-    List explicitList = [];
-    if (isExplicitlyTyped) {
-      // Use checkListType for explicitly typed lists
-      newType = checkListType(inputData);
-      explicitList = inputData;
-    } else { 
-    // Case 2: Generic is undetermined; shows as List<dynamic>. Determine the actual generic
-      // Get actual List type. Use manualCheckListType for List<dynamic>
-      newType = manualCheckListType(inputData);
-      // Create an explicit list of the inferred type
-      
-      if(newType == num){
-        explicitList = <double>[];
-        newType = double;
-        for(num number in inputData){
-          if(number is int){
-            explicitList.add(number.toDouble());
-          } else {
-            explicitList.add(number);
-          }
+    List explicitList;
+
+    // Fast path if explicitly typed 
+    if (inputData is NList||inputData is List<int>||inputData is List<double>||inputData is List<String>||inputData is List<bool>) {
+      newType = checkListGenericType(inputData);
+      // Normalize num -> double if your checker can yield `num`
+      if (newType == num) {
+        final out = List<double>.filled(n, 0.0);
+        for (int i = 0; i < n; i++) {
+          out[i] = (inputData[i] as num).toDouble();
         }
+        newType = double;
+        explicitList = out;
       } else {
-        explicitList = createListFromType(newType);
-        for(var e in inputData){
-          explicitList.add(e);
-        }        
+        explicitList = inputData;
       }
     }
-    // Replace data and update column types
-    if (columnIndexMap.containsKey(columnName)) {
-      List columnIndices = columnIndexMap[columnName];
-      for (int index in columnIndices) {
+    // Normalize List<num> to List<double>
+    else if (inputData is List<num>) {
+      final output = List<double>.filled(n, 0.0);
+      for (int i = 0; i < n; i++) {
+        output[i] = inputData[i].toDouble();
+      }
+      newType = double;
+      explicitList = output;
+    }
+    // Untyped / List<dynamic> path: single pass + optional one promotion
+    else {
+      // state:
+      // 0 = unknown, 1 = int, 2 = double, 3 = String, 4 = bool, 5 = Object
+      int state = 0;
+
+      List<int>? outputInt;
+      List<double>? outputDouble;
+      List<String>? outputString;
+      List<bool>? outputBool;
+      List<Object>? outputObject;
+
+      for (int i = 0; i < n; i++) {
+        final v = inputData[i];
+
+        if (state == 0) {
+          if (v is int) {
+            state = 1;
+            outputInt = List<int>.filled(n, 0);
+            outputInt[i] = v;
+            continue;
+          }
+          if (v is double) {
+            state = 2;
+            outputDouble = List<double>.filled(n, 0.0);
+            outputDouble[i] = v;
+            continue;
+          }
+          if (v is num) {
+            state = 2;
+            outputDouble = List<double>.filled(n, 0.0);
+            outputDouble[i] = v.toDouble();
+            continue;
+          }
+          if (v is String) {
+            state = 3;
+            outputString = List<String>.filled(n, '');
+            outputString[i] = v;
+            continue;
+          }
+          if (v is bool) {
+            state = 4;
+            outputBool = List<bool>.filled(n, false);
+            outputBool[i] = v;
+            continue;
+          }
+
+          state = 5;
+          outputObject = List<Object>.filled(n, 0);
+          outputObject[i] = v as Object;
+          continue;
+        }
+
+        if (state == 1) { // int
+          if (v is int) {
+            outputInt![i] = v;
+            continue;
+          }
+          if (v is double) {
+            // promote int -> double (copy prefix once)
+            final d = List<double>.filled(n, 0.0);
+            final oi = outputInt!;
+            for (int k = 0; k < i; k++) {
+              d[k] = oi[k].toDouble();
+            }
+            d[i] = v;
+            outputInt = null;
+            outputDouble = d;
+            state = 2;
+            continue;
+          }
+          if (v is num) {
+            final d = List<double>.filled(n, 0.0);
+            final oi = outputInt!;
+            for (int k = 0; k < i; k++) {
+              d[k] = oi[k].toDouble();
+            }
+            d[i] = v.toDouble();
+            outputInt = null;
+            outputDouble = d;
+            state = 2;
+            continue;
+          }
+          // widen -> Object (copy prefix once)
+          final o = List<Object>.filled(n, 0);
+          final oi = outputInt!;
+          for (int k = 0; k < i; k++) {
+            o[k] = oi[k];
+          }
+          o[i] = v as Object;
+          outputInt = null;
+          outputObject = o;
+          state = 5;
+          continue;
+        }
+
+        if (state == 2) { // double
+          if (v is int) {
+            outputDouble![i] = v.toDouble();
+            continue;
+          }
+          if (v is double) {
+            outputDouble![i] = v;
+            continue;
+          }
+          if (v is num) {
+            outputDouble![i] = v.toDouble();
+            continue;
+          }
+          final o = List<Object>.filled(n, 0);
+          final od = outputDouble!;
+          for (int k = 0; k < i; k++) {
+            o[k] = od[k];
+          }
+          o[i] = v as Object;
+          outputDouble = null;
+          outputObject = o;
+          state = 5;
+          continue;
+        }
+
+        if (state == 3) { // String
+          if (v is String) {
+            outputString![i] = v;
+            continue;
+          }
+          final o = List<Object>.filled(n, 0);
+          final os = outputString!;
+          for (int k = 0; k < i; k++) {
+            o[k] = os[k];
+          }
+          o[i] = v as Object;
+          outputString = null;
+          outputObject = o;
+          state = 5;
+          continue;
+        }
+
+        if (state == 4) { // bool
+          if (v is bool) {
+            outputBool![i] = v;
+            continue;
+          }
+          final o = List<Object>.filled(n, 0);
+          final ob = outputBool!;
+          for (int k = 0; k < i; k++) {
+            o[k] = ob[k];
+          }
+          o[i] = v as Object;
+          outputBool = null;
+          outputObject = o;
+          state = 5;
+          continue;
+        }
+
+        // Object
+        outputObject![i] = v as Object;
+      }
+
+      if (state == 1) {
+        newType = int;
+        explicitList = outputInt!;
+      } else if (state == 2) {
+        newType = double;
+        explicitList = outputDouble!;
+      } else if (state == 3) {
+        newType = String;
+        explicitList = outputString!;
+      } else if (state == 4) {
+        newType = bool;
+        explicitList = outputBool!;
+      } else {
+        newType = Object;
+        explicitList = outputObject!;
+      }
+    }
+    // Store
+    final columnIndices = columnIndexMap[columnName];
+    if (columnIndices != null) {
+      for (final int index in columnIndices) {
         data[index] = explicitList;
         columnTypes[index] = newType;
       }
     } else {
-      // Add new column
-      indexer([columnName], true);
+      addToIndex([columnName], true);
       data.add(explicitList);
       columnTypes.add(newType);
     }
   }
-}
-
-// * Utility Functions *
-
-/// Returns the runtime type of a List's generic type if it is explicit.
-/// - Parameter column: The list to check.
-/// - Returns: The determined type of the list.
-Type checkListType(List column) {
-  if (column is List<int> || column is List<int?>) {
-    return int;
-  } else if (column is List<double> || column is List<double?>) {
-    return double;
-  } else if (column is List<num> || column is List<num?>) {
-    return num;
-  } else if (column is List<String> || column is List<String?>) {
-    return String;
-  } else if (column is List<bool>) {
-    return bool;
-  } else {
-    return Object;
-  }
-}
-
-/// Determines a List's actual type by checking each element.
-/// - Parameter column: The list to inspect.
-/// - Returns: The inferred type of the list.
-Type manualCheckListType(List column) {
-  // Initially assume the most general type
-  Type listType = Object;
-  // Set to hold unique element types
-  Set<Type> listTypes = {};
-  // Collect runtime types of all elements
-  for (var element in column) {
-    listTypes.add(element.runtimeType);
-  }
-  // Determine the general type based on collected types
-  if (listTypes.length == 1) {
-    // All elements are of the same type
-    listType = listTypes.first;
-  } else if (listTypes.every((type) => type == int || type == double)) {
-    // All types are int or double
-    listType = num;
-  } else {
-    // Mixed types, default to Object
-    listType = Object;
-  }
-  return listType;
-}
-
-/// Creates a list of a specific type.
-/// - Parameter type: The type to create a list for.
-/// - Returns: An empty list of the specified type.
-List createListFromType(Type type) {
-  if (identical(type, int)) {
-    return <int>[];
-  } else if (identical(type, double)) {
-    return <double>[];
-  } else if (identical(type, num)) {
-    return <num>[];
-  } else if (identical(type, String)) {
-    return <String>[];
-  } else if (identical(type, bool)) {
-    return <bool>[];
-  } else {
-    return <Object>[];
-  }
-}
-/// Expands a list of indices that contains List elements into a flat range of integers.
-/// e.g. columnIndices = [0, [2, 4], 6] would return [0, 2, 3, 4, 6] with expandIndices
-List<int> expandIndices(List<dynamic>? indices) {
-    List<int> expanded = [];
-    if (indices != null) {
-      for (var index in indices) {
-        if (index is int) {
-          expanded.add(index);
-        } else if (index is List && index.length == 2 && index[0] is int && index[1] is int) {
-          expanded.addAll(List.generate(index[1] - index[0] + 1, (i) => index[0] + i));
-        }
-      }
-    }
-    return expanded;
 }

@@ -251,7 +251,7 @@ void main() {
       expect(sortedDf['B'], equals(['pear', 'banana', 'apple', 'Apple'])); // Column B reordered
     });
     test('Sort column B alphabetically (case-insensitive)', () {
-      final sortedDf = df.sort('B', inplace: false, ); //todo edit
+      final sortedDf = df.sort('B', inplace: false, ); 
       expect(sortedDf['B'], equals(['Apple', 'apple', 'banana', 'pear'])); // Column B sorted alphabetically
       expect(sortedDf['A'], equals([1, 2, 3, 4])); // Column A reordered accordingly
     });
