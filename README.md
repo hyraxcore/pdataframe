@@ -1,11 +1,13 @@
 # pdataframe
 
-A DataFrame library for storing, manipulating, and analyzing data, using an interface similar to Python’s pandas.
-Designed for large datasets; key features include fast label-based access (`O(k)`) and support for duplicate labels. 
+A DataFrame library for storing, manipulating, and analyzing data, using an interface similar to Python's pandas.
+Designed for large datasets; key features include fast label-based access (`O(k)`) and support for duplicate labels.
+Numerical data is stored using `NList`, a custom growable typed list wrapper.
 
 ## Usage examples:
 
-Create a DataFrame
+*Create a DataFrame*
+
 ```dart
 // List input; each inner List is a row of data 
 final dfList = DataFrame([[1,2,3],[4,5,6],[7,8,9]]); 
@@ -24,23 +26,31 @@ print(df);
 // Cat | 7 | 'no' |  9
 ```
 
-Verify column types
+**Note:** When creating a DataFrame from a `Map`, `null` values can be stored in non-integer columns.
+
+
+*Verify column types*
+
 ```dart
 print(df.dtypes); // [int, Object, Double]
 ```
-Note: For simplicity, `dtypes` does not distinguish between nullable and non-nullable types (e.g. int? shown as int). 
 
-Access a column of data
+**Note:** For simplicity, `dtypes` does not distinguish between nullable and non-nullable types (e.g. int? shown as int). 
+
+*Access a column of data*
+
 ```dart
 print(df['a']); // [1,4,7]
 ```
 
-Retrieve a row of data
+*Retrieve a row of data*
+
 ```dart
 print(df2.iloc(row: 1)); // [1, 2, 3.0]
 ```
 
-Edit data (multiple methods)
+*Edit data (multiple methods)*
+
 ```dart
 // Edit data via columns
 df['a'][2] = [30];
@@ -52,7 +62,8 @@ df.iloc[2][0] = 30;
 df.loc['Cat']['a'] = 30;
 ```
 
-Add Data
+*Add Data*
+
 ```dart
 // Add one DataFrame to another DataFrame using concat()
 var newDf = concat([dfList, dfMap], axis:0); // 'axis:0' combines the columns 
@@ -60,21 +71,25 @@ var newDf = concat([dfList, dfMap], axis:0); // 'axis:0' combines the columns
 // Append a new row to a DataFrame 
 var newDf = df.append([[1,2,3]], columns:['M','W','F']); 
 ```
-Note: Use parameter `inplace:true` to modify the current DataFrame
 
-Delete Data
+**Note:** Use parameter `inplace:true` to modify the current DataFrame
+
+*Delete Data*
+
 ```dart
 // Drop a row
 var newDf = drop('Cat', axis:0); // 'axis:0' specifies a row operation ('axis:1' would be a column)  
 ```
 
-Apply a math function to a column
+*Apply a math function to a column*
+
 ```dart
 // Apply '*2' to every value in column a
 df.m('a',(a)=>a*2);
 ```
 
-csv import/export support
+*CSV import/export support*
+
 ```dart
 // Import data from data.csv file
 var file = await DataFrame.read_csv('lib/files/data.csv');
@@ -83,7 +98,8 @@ var file = await DataFrame.read_csv('lib/files/data.csv');
 df.to_csv(file:'lib/files/dataOutput.csv', index: true);
 ```
 
-Timestamp (basic functionality)
+*Timestamp (basic functionality)*
+
 ```dart
 // Create a Timestamp
 var ts1 = Timestamp("February 9, 1999");

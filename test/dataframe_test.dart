@@ -1,36 +1,39 @@
+import 'dart:typed_data';
 import 'package:pdataframe/pdataframe.dart';
 import 'package:test/test.dart';
 
 
 void main() {
   group('[] operator tests', (){
-    final df = DataFrame({'a':[1,2,3], 0:[4,5,6], true:[7,8,9]}, );
-    test('Test that [] operator returns a column of data', (){
-      expect(df['a'], equals([1,2,3])); // Returns column 'a'
-      expect(df[0], equals([4,5,6])); // Returns column 0
-      // Returns a DataFrame containing only columns 'a' and 0 when argument is a List of Lists
-      var df2 = df[['a',0]];
-      expect(df2.columns, equals(['a',0])); 
-      expect(df2.values, equals([[1,2,3],[4,5,6]]));
-    });
-    test('Test that []= operator ', (){
-      // Replace an int value with a double
-      df['a'] = [1,2.2,3]; // Replace a column 'a' int value with a double
-      expect(df['a'], equals([1.0,2.2,3.0])); // Check that column int values are converted to double
-      expect(df['a'].runtimeType, equals(List<double>));  // Check that List<int> is now List<double>
-      expect(df.dtypes, equals([double, int, int]));  // Check that dtypes correctly shows double
-      // Replacing int column with String
-      df[0] = ['a', 'bee', 'cee'];      
-      expect(df[0], equals(['a', 'bee', 'cee'])); // Check that column 0 values have been replaced
-      expect(df[0].runtimeType, equals(List<String>));  // Check that List<int> is now List<String>
-      expect(df.dtypes, equals([double, String, int]));  // Check that dtypes correctly shows String
-      // Replacing int column with mixed type (Object)
-      df[true] = ['a', true, 1];
-      expect(df[true], equals(['a', true, 1])); // Check that column 0 values have been replaced
-      expect(df[true].runtimeType, equals(List<Object>));  // Check that List<int> is now List<String>
-      expect(df.dtypes, equals([double, String, Object]));  // Check that dtypes correctly shows String
-    });
+  final df = DataFrame({'a':[1,2,3], 0:[4,5,6], true:[7,8,9]}, );
+  test('Test that [] operator returns a column of data', (){
+    expect(df['a'], equals([1,2,3])); // Returns column 'a'
+    expect(df[0], equals([4,5,6])); // Returns column 0
+    // Returns a DataFrame containing only columns 'a' and 0 when argument is a List of Lists
+    var df2 = df[['a',0]];
+    expect(df2.columns, equals(['a',0])); 
+    expect(df2.values, equals([[1,2,3],[4,5,6]]));
   });
+  test('Test that []= operator ', (){
+    // Replace an int value with a double
+    df['a'] = [1,2.2,3];
+    expect(df['a'], equals([1.0,2.2,3.0]));
+    // CHANGED: runtimeType is now NList, check via is and dtype instead
+    expect(df['a'] is NList, isTrue);
+    expect((df['a'] as NList).dtype, equals(Float64List));
+    expect(df.dtypes, equals([double, int, int]));
+    // Replacing int column with String
+    df[0] = ['a', 'bee', 'cee'];      
+    expect(df[0], equals(['a', 'bee', 'cee']));
+    expect(df[0].runtimeType, equals(List<String>));  // String stays as plain List, unchanged
+    expect(df.dtypes, equals([double, String, int]));
+    // Replacing int column with mixed type (Object)
+    df[true] = ['a', true, 1];
+    expect(df[true], equals(['a', true, 1]));
+    expect(df[true].runtimeType, equals(List<Object>));  // Object stays as plain List, unchanged
+    expect(df.dtypes, equals([double, String, Object]));
+  });
+});
   group('DataFrame List input tests', () {
     final df = DataFrame([[1, 4, 7], [2, 'hi'], [3,6,9]], index: ['three', 2, 'four'], columns: ['zero', 1, 'two']);
     test('Data and index/column labels are correctly stored', () {

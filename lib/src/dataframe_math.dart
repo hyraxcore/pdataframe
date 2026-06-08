@@ -27,7 +27,7 @@ extension DataFrameMath on DataFrame{
     // extract group keys and values
     final keys = this[byColName];
     final values = valueColName != null
-        ? filterNulls(_colIndex(valueColName))
+        ? _f64(filterNulls(_colIndex(valueColName)))
         : <double>[];
     // build groups of row‐indices
     final Map<Object, List<int>> idxs = {};
@@ -39,14 +39,14 @@ extension DataFrameMath on DataFrame{
       final out = List<double>.filled(keys.length, double.nan);
       idxs.forEach((k, list) {
         final t = transform(list.map((i) => values[i]).toList());
-        for (var i in list) out[i] = t;
+        for (var i in list) {out[i] = t;}
       });
       // build one row-per-input as single-column "transformed" DataFrame
       final rows = out.map((v) => [v]).toList();
       return DataFrame(
        rows,
       columns: ['${valueColName!}_transformed'],
-      index: this.index,  // preserve original row labels
+      index: index,  // preserve original row labels
      );
     }
     // aggregate -> one row per group
@@ -107,9 +107,8 @@ extension DataFrameMath on DataFrame{
 
     final idxs = this[indexCol];
     final cols = this[columnCol];
-    final vals = filterNulls(_colIndex(valueCol));
-
-    final uniqIdx  = idxs.toSet().toList()..sort();
+    final vals = _f64(filterNulls(_colIndex(valueCol)));
+    final uniqIdx = idxs.toSet().toList()..sort();
     final uniqCols = cols.toSet().toList()..sort();
     final table    = <List<Object?>>[];
 
@@ -218,12 +217,16 @@ extension DataFrameMath on DataFrame{
       throw ArgumentError('asList and inplace parameters cannot both be true');
     }
     List<num> list = (this[colName] as List).cast<num>();
-    List<double> newList = <double>[];
-    for (num e in list) {
-      newList.add(operation(e));
-    }
     if(asList){
+      List<double> newList = <double>[];
+      for (num e in list) {
+        newList.add(operation(e));
+      }
       return newList;
+    }
+    final newList = NList(List<double>.filled(list.length, 0.0), type: double);
+    for (var i = 0; i < list.length; i++) {
+      newList[i] = operation(list[i]);
     }
     if(inplace){
       this[colName] = newList;
@@ -238,12 +241,11 @@ extension DataFrameMath on DataFrame{
   /// - Parameters:
   ///   - columnIndex: The index of the column to filter.
   ///   - skipNull: If true, skips null values; if false, replaces nulls with 0.0.
-  List<double> filterNulls(var columnIndex, {bool skipNull = true}) {
-    final rawData = List.from(_dataCore.data[columnIndex]);
-    List<double> processedData;
+  NList filterNulls(var columnIndex, {bool skipNull = true}) {
+    final rawData = _dataCore.data[columnIndex];
+    final processedData = NList([], type: double);
     if (skipNull == true) {
       // Skip null values and convert to double
-      processedData = [];
       for (var e in rawData) {
         if (e is num && (!(e is double) || !e.isNaN)) {
           processedData.add(e.toDouble());
@@ -251,13 +253,13 @@ extension DataFrameMath on DataFrame{
       }
     } else {
       // Replace null with 0.0 and convert to double
-      processedData = rawData.map((e) {
+      for (var e in rawData) {
         if (e is num) {
-          return (e is double && e.isNaN) ? 0.0 : e.toDouble();
+          processedData.add((e is double && e.isNaN) ? 0.0 : e.toDouble());
         } else {
-          return 0.0;
+          processedData.add(0.0);
         }
-      }).toList();
+      }
     }
     return processedData;
   }
@@ -296,22 +298,27 @@ extension DataFrameMath on DataFrame{
   /// Sums the values in a specified column.
   double sumCol(int columnIndex) {
     return filterNulls(columnIndex)
-        .reduce((total, val) => total + val); // Sum non-null values in the column
+        .reduce((total, val) => (total as double) + (val as double)) as double;
   }
   /// Calculates the mean (average) of the values in a specified column.
   double mean(int columnIndex) {
-    return sumCol(columnIndex) / filterNulls(columnIndex).length; // Divide the sum by the count of non-null values
+    return sumCol(columnIndex) / filterNulls(columnIndex).length;
   }
   /// Returns the maximum value in a specified column.
   double max(int columnIndex) {
-    return filterNulls(columnIndex).reduce((a, b) => a > b ? a : b); // Find the maximum of the non-null values
+    return filterNulls(columnIndex)
+        .reduce((a, b) => (a as double) > (b as double) ? a : b) as double;
   }
   /// Returns the minimum value in a specified column.
   double min(int columnIndex) {
-    return filterNulls(columnIndex).reduce((a, b) => a < b ? a : b);
+    return filterNulls(columnIndex)
+        .reduce((a, b) => (a as double) < (b as double) ? a : b) as double;
   }
 
-  // * Moving Window Operations 
+  // * Moving Window Operations
+
+  /// Helper: get Float64List from filterNulls NList for direct arithmetic.
+  Float64List _f64(NList nl) => nl.backing as Float64List;
 
   /// Computes the rolling sum over a fixed-size window on a numeric column.
   ///
@@ -319,7 +326,7 @@ extension DataFrameMath on DataFrame{
   /// [window] is the number of consecutive values to include in each sum.
   List<double> rollingSum(int columnIndex, int window) {
     if (window <= 0) throw ArgumentError('Window must be > 0');
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
     final result = List<double>.filled(n, double.nan);
     double sum = 0;
@@ -346,7 +353,7 @@ extension DataFrameMath on DataFrame{
   /// [window] is the number of consecutive values to include in each sum.
   List<double> rollingStd(int columnIndex, int window) {
     if (window <= 0) throw ArgumentError('Window must be > 0');
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
     final result = List<double>.filled(n, double.nan);
     for (var i = window - 1; i < n; i++) {
@@ -376,7 +383,7 @@ extension DataFrameMath on DataFrame{
     double Function(List<double>) func,
   ) {
     if (window <= 0) throw ArgumentError('Window must be > 0');
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
     final result = List<double>.filled(n, double.nan);
     for (var i = window - 1; i < n; i++) {
@@ -390,7 +397,7 @@ extension DataFrameMath on DataFrame{
 
   /// Computes the expanding minimum for a column.
   List<double> expandingMin(int columnIndex) {
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
     final result = List<double>.filled(n, double.nan);
     if (n == 0) return result;
@@ -404,7 +411,7 @@ extension DataFrameMath on DataFrame{
   }
   /// Computes the expanding maximum for a column.
   List<double> expandingMax(int columnIndex) {
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
     final result = List<double>.filled(n, double.nan);
     if (n == 0) return result;
@@ -418,7 +425,7 @@ extension DataFrameMath on DataFrame{
   }
   /// Computes the expanding mean for a column.
   List<double> expandingMean(int columnIndex) {
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
     final result = List<double>.filled(n, double.nan);
     double sum = 0;
@@ -431,7 +438,7 @@ extension DataFrameMath on DataFrame{
   /// Computes the expanding variance for a column.
   /// The [ddof] parameter determines the type of variance: `0` for population, `1` for sample.
   List<double> expandingVar(int columnIndex, {int ddof = 1}) {
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
     final result = List<double>.filled(n, double.nan);
     double sum = 0, sumSq = 0;
@@ -460,7 +467,7 @@ extension DataFrameMath on DataFrame{
     if (alpha <= 0 || alpha > 1) {
       throw ArgumentError.value(alpha, 'alpha', 'must be in (0,1]');
     }
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
     final result = List<double>.filled(n, double.nan);
     if (n == 0) return result;
@@ -476,7 +483,7 @@ extension DataFrameMath on DataFrame{
     if (alpha <= 0 || alpha > 1) {
       throw ArgumentError.value(alpha, 'alpha', 'must be in (0,1]');
     }
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
     final mean = ewmMean(columnIndex, alpha);
     final result = List<double>.filled(n, double.nan);
@@ -484,8 +491,7 @@ extension DataFrameMath on DataFrame{
     result[0] = 0.0;
     for (var i = 1; i < n; i++) {
       final dev = data[i] - mean[i];
-      result[i] =
-          alpha * dev * dev + (1 - alpha) * result[i - 1];
+      result[i] = alpha * dev * dev + (1 - alpha) * result[i - 1];
     }
     return result;
   }
@@ -506,8 +512,8 @@ extension DataFrameMath on DataFrame{
       throw ArgumentError.value(alpha, 'alpha', 'must be in (0,1]');
     }
 
-    final x = filterNulls(columnIndexX);
-    final y = filterNulls(columnIndexY);
+    final x = _f64(filterNulls(columnIndexX));
+    final y = _f64(filterNulls(columnIndexY));
     if (x.length != y.length) {
       throw ArgumentError('Columns must have same length: got ${x.length} vs ${y.length}');
     }
@@ -597,7 +603,7 @@ extension DataFrameMath on DataFrame{
     }).cast<DateTime>().toList();
 
     // 2) Extract numeric column and bounding times
-    final vals = filterNulls(_colIndex(valueCol));
+    final vals = _f64(filterNulls(_colIndex(valueCol)));
     final low  = times.first;
     final high = times.last;
 
@@ -656,7 +662,7 @@ extension DataFrameMath on DataFrame{
   ///   - [columnIndex] - index of the numeric column to analyze.
   ///   - [maxLag] - maximum lag to compute partial autocorrelations for.
   List<double> partialAutocorrelation(int columnIndex, int maxLag) {
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
     final mean = data.reduce((a,b)=>a+b) / n;
     // compute autocovariances r[0..maxLag]
@@ -698,7 +704,7 @@ extension DataFrameMath on DataFrame{
   ///   - [columnIndex] - index of the numeric column to analyze.
   ///   - [maxLag] - maximum lag value to compute autocorrelation for.
   List<double> autocorrelation(int columnIndex, int maxLag) {
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
     final mean = data.reduce((a,b)=>a+b) / n;
     final var0 = data.map((x)=> (x-mean)*(x-mean)).reduce((a,b)=>a+b) / n;
@@ -722,7 +728,7 @@ extension DataFrameMath on DataFrame{
     int columnIndex,
     int period,
   ) {
-    final data = filterNulls(columnIndex);
+    final data = _f64(filterNulls(columnIndex));
     final n = data.length;
 
     // 4a) Trend: centered moving average
@@ -838,10 +844,10 @@ extension DataFrameMath on DataFrame{
   }) {
     final useCols = cols ?? columns; // inside DataFrame class
     // 1. Build data matrix (rows = observations, cols = variables)
-    final mat = filterNulls(_colIndex(useCols.first))
+    final mat = (_f64(filterNulls(_colIndex(useCols.first))))
         .asMap()
         .keys
-        .map((i) => useCols.map((c) => filterNulls(_colIndex(c))[i]).toList())
+        .map((i) => useCols.map((c) => (_f64(filterNulls(_colIndex(c))))[i]).toList())
         .toList();
     // 2. Center/scale in-place
     for (var j = 0; j < useCols.length; j++) {
@@ -915,11 +921,11 @@ extension DataFrameMath on DataFrame{
   ///   - [sweeps] - number of Jacobi sweeps (default: `100`).
   SVDResult svd({List<String>? cols, int sweeps = 100}) { 
     final useCols = cols ?? columns;
-    final mat = filterNulls(_colIndex(useCols.first))
+    final mat = (_f64(filterNulls(_colIndex(useCols.first))))
         .asMap()
         .keys
         .map((i) => useCols
-            .map((c) => filterNulls(_colIndex(c))[i].toDouble())
+            .map((c) => (_f64(filterNulls(_colIndex(c))))[i])
             .toList())
         .toList();
     final numeric = jacobiSvd(mat, maxSweeps: sweeps);
@@ -1095,13 +1101,13 @@ extension DataFrameMath on DataFrame{
   ///   - [valueCol] - numeric column to compare between groups.
   TTestResult tTest(String groupCol, String valueCol) {
     final keys = this[groupCol];
-    final vals = filterNulls(_colIndex(valueCol));
+    final vals = _f64(filterNulls(_colIndex(valueCol)));
     // split into two groups
     final g1 = <double>[], g2 = <double>[];
     for (var i = 0; i < keys.length; i++) {
       final v = vals[i];
-      if (keys[i] == keys.first) g1.add(v);
-      else g2.add(v);
+      if (keys[i] == keys.first) {g1.add(v);}
+      else {g2.add(v);}
     }
     final n1 = g1.length, n2 = g2.length;
     final m1 = g1.reduce((a,b)=>a+b)/n1;
@@ -1122,7 +1128,7 @@ extension DataFrameMath on DataFrame{
   ///   - [valueCol] - numeric column to test for group-wise differences.
   ANOVAResult anova(String groupCol, String valueCol) {
     final keys = this[groupCol];
-    final vals = filterNulls(_colIndex(valueCol));
+    final vals = _f64(filterNulls(_colIndex(valueCol)));
     // group values
     final Map<Object, List<double>> groups = {};
     for (var i = 0; i < keys.length; i++) {
@@ -1217,7 +1223,7 @@ extension DataFrameMath on DataFrame{
     required double Function(List<double>) statistic,
     int nBoot = 1000,
   }) {
-    final vals = filterNulls(_colIndex(valueCol));
+    final vals = _f64(filterNulls(_colIndex(valueCol)));
     final n = vals.length;
     final samples = <double>[];
     final rand = math.Random();
@@ -1291,7 +1297,7 @@ extension DataFrameMath on DataFrame{
   ///   - [timeCol] - time column (used to infer sampling interval).
   ///   - [valueCol] - numeric signal to transform.
   DataFrame fft(String timeCol, String valueCol) {
-    final times = this.index.cast<DateTime>();
+    final times = index.cast<DateTime>();
     final ts = times
         .map((t) => t.millisecondsSinceEpoch.toDouble())
         .toList();
@@ -1310,7 +1316,7 @@ extension DataFrameMath on DataFrame{
       for (var n0 = 0; n0 < N; n0++) {
         final angle = 2 * math.pi * k * n0 / N;
         re += x[n0] * math.cos(angle);
-        im -= x[n0] * math.sin(angle);  // negative for e^{-iωn}
+        im -= x[n0] * math.sin(angle);  // negative for e^{-iwn}
       }
       return [re, im];
     }, growable: false);
@@ -1340,7 +1346,7 @@ extension DataFrameMath on DataFrame{
       return DataFrame(
         [List<bool>.filled(vals.length, false)],
         columns: ['${valueCol}_outlierIQR'],
-        index: this.index,
+        index: index,
       );
     }
 

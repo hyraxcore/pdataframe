@@ -115,14 +115,20 @@ List<int> expandIndices(List<dynamic>? indices) {
 /// - Parameter column: The list to check.
 /// - Returns: The determined type of the list.
 Type checkListGenericType(List column) {
-  if(column is NList){
-    if(column.dtype == Int32List){
+  if (column is NList) {
+    if (column.dtype == Int32List) {
       return Int32List;
-    } else if(column.dtype == Float64List){
+    } else if (column.dtype == Float32List) {
+      // ADDED
+      return Float32List;
+    } else if (column.dtype == Float64List) {
       return Float64List;
     } else {
       return Object;
     }
+  } else if (column is Float32List) {
+    // ADDED
+    return Float32List;
   } else if (column is List<int> || column is List<int?>) {
     return int;
   } else if (column is List<double> || column is List<double?>) {

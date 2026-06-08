@@ -1,14 +1,17 @@
 import 'dfunctions.dart';
 import 'nlist.dart';
+import 'dart:typed_data';
 
 /// The DataFrameCore<T> class is the foundational data structure for DataFrame 
-/// It handles data storage, column type management, and indexing mechanisms for both rows and columns. 
+/// It handles data storage, column type management, and indexing mechanisms for both rows and columns.
+
 class DataFrameCore<T> {
   // * Fields *
   String name = '';
   List data = [];
   List<Type> columnTypes = <Type>[]; // columnTypes saves List generics because Dart does not store inner generics at runtime
-  
+  Set<Type> preservedTypes = {};
+
   Map rowIndexMap = {};
   Map columnIndexMap = {};
   int rowLastIndexVal = -1;
@@ -26,67 +29,80 @@ class DataFrameCore<T> {
     // Handle the case where a new column needs to be added
     if (colIndex >= data.length) {
       if (rowIndex != -1) {
-        // Cannot edit in a non-existent column
         throw Exception("Cannot edit in a new column at index $colIndex");
       } else {
         // Adding a new column
         columnTypes.add(eType);
-        data.add([input]);
+        if (eType == int && !preservedTypes.contains(Int32List)) {
+          data.add(NList([input], type: int));
+        } else if ((eType == double || eType == num) && !preservedTypes.contains(Float64List)) {
+          data.add(NList([input], type: double));
+        } else if (eType == Float32List) {
+          data.add(NList([], type: Float32List));
+        } else {
+          data.add([input]);
+        }
         return;
       }
     }
     // Determine the target index for adding or editing
     int targetIndex = rowIndex;
     if (rowIndex == -1) {
-      // Adding to the end of the column
       targetIndex = data[colIndex].length;
     } else if (rowIndex < 0 || rowIndex >= data[colIndex].length) {
       throw Exception("Invalid edit index $rowIndex for column $colIndex");
     }
     // Proceed with type checking and handling
     if (eType == columnTypes[colIndex]) {
-      // Types match
       if (targetIndex == data[colIndex].length) {
-        data[colIndex].add(input); // Adding
+        data[colIndex].add(input);
       } else {
-        data[colIndex][targetIndex] = input; // Editing
+        data[colIndex][targetIndex] = input;
       }
     } else if ((eType == double || eType == num) && columnTypes[colIndex] == int) {
-      // Upgrade column type to double
       columnTypes[colIndex] = double;
-      List<double> tempList = [];
-      for (num e in data[colIndex]) {
-        tempList.add(e.toDouble());
-      }
-      if (targetIndex == data[colIndex].length) {
-        tempList.add((input as num).toDouble());
+      if (!preservedTypes.contains(Float64List)) {
+        final promoted = NList([], type: double);
+        for (num e in data[colIndex]) {
+          promoted.add(e.toDouble());
+        }
+        if (targetIndex == data[colIndex].length) {
+          promoted.add((input as num).toDouble());
+        } else {
+          promoted[targetIndex] = (input as num).toDouble();
+        }
+        data[colIndex] = promoted;
       } else {
-        tempList[targetIndex] = (input as num).toDouble();
+        List<double> tempList = [];
+        for (num e in data[colIndex]) {
+          tempList.add(e.toDouble());
+        }
+        if (targetIndex == data[colIndex].length) {
+          tempList.add((input as num).toDouble());
+        } else {
+          tempList[targetIndex] = (input as num).toDouble();
+        }
+        data[colIndex] = tempList;
       }
-      data[colIndex] = tempList;
     } else if (eType == int && columnTypes[colIndex] == double) {
-      // Input is int, column expects double
       if (targetIndex == data[colIndex].length) {
         data[colIndex].add((input as int).toDouble());
       } else {
         data[colIndex][targetIndex] = (input as int).toDouble();
       }
     } else if (columnTypes[colIndex] == String && eType == num) {
-      // Column expects String but input is numeric
       if (targetIndex == data[colIndex].length) {
         data[colIndex].add(input.toString());
       } else {
         data[colIndex][targetIndex] = input.toString();
       }
     } else if (columnTypes[colIndex] == Object || columnTypes[colIndex] == dynamic) {
-      // Column type is Object or dynamic
       if (targetIndex == data[colIndex].length) {
         data[colIndex].add(input);
       } else {
         data[colIndex][targetIndex] = input;
       }
     } else {
-      // Change column type to Object for mixed types
       columnTypes[colIndex] = Object;
       List newList = createListFromType(Object);
       for (var e in data[colIndex]) {
@@ -263,44 +279,6 @@ class DataFrameCore<T> {
     }
   }
 
-  // * Type Inference Methods *
-
-  /// Scans a list and infers the types of columns, updating `columnTypes`.
-  // Used only when a new list is entered.
-  //TODO DELETE, not being used
-  // void scanTypes(var inputList) {
-  //   // //TODO: if nList 
-  //   // if(inputList is NList){
-  //   //   columnTypes[columnCounter] = double;
-  //   //   return;
-  //   // }
-  //   // If inputList is a List
-  //   if (inputList is List && inputList is! String) {
-  //     int columnCounter = 0;
-  //     for (var element in inputList) {
-  //       Set<Type> typesInColumn = {};
-  //       int elementCounter = 0;
-  //       while (elementCounter < element.length) {
-  //         typesInColumn.add(element[elementCounter].runtimeType);
-  //         ++elementCounter;
-  //       }
-  //       // Determine column type based on collected types
-  //       if (typesInColumn.contains(int) && typesInColumn.contains(double)) {
-  //         columnTypes[columnCounter] = double;
-  //       } else if (typesInColumn.every((e) => e == int)) {
-  //         columnTypes[columnCounter] = int;
-  //       } else if (typesInColumn.every((e) => e == double)) {
-  //         columnTypes[columnCounter] = double;
-  //       } else if (typesInColumn.every((e) => e == String)) {
-  //         columnTypes[columnCounter] = String;
-  //       } else {
-  //         columnTypes[columnCounter] = Object;
-  //       }
-  //       ++columnCounter;
-  //     }
-  //   }
-  // }
-
   // * Utility Methods *
 
   /// Resets row indices to default integer values starting from zero.
@@ -386,61 +364,65 @@ class DataFrameCore<T> {
 
     if (checkType) {
       // *** Type collection done here
-      // Ensure columnTypes is declared in the global scope before calling this function
       columnTypes = List.filled(maxLength, Object);
 
       // Infer the type for all the columns
       for (int j = 0; j < maxLength; j++) {
-        Set<Type> typesInColumn = {}; // Holds the types in a single column
-        // Iterate through the entire column j, adding the type found in each element
+        Set<Type> typesInColumn = {};
         for (int i = 0; i < matrix.length; i++) {
           if (matrix[i].length > j && matrix[i][j] != null) {
             typesInColumn.add(matrix[i][j].runtimeType);
           }
         }
-        // Decision making - scan typesInColumn to determine what type should represent the entire column j
         if (typesInColumn.contains(int) && typesInColumn.contains(double) && typesInColumn.length == 2) {
-          columnTypes[j] = double;  // Use double to cover both int and double
+          columnTypes[j] = double;
         } else if (typesInColumn.every((type) => type == int)) {
-          columnTypes[j] = int;  // All are integers
+          columnTypes[j] = int;
         } else if (typesInColumn.every((type) => type == double)) {
-          columnTypes[j] = double;  // All are doubles
+          columnTypes[j] = double;
         } else if (typesInColumn.every((type) => type == String)) {
-          columnTypes[j] = String;  // All are strings
+          columnTypes[j] = String;
         } else if (typesInColumn.every((type) => type == bool)) {
-          columnTypes[j] = bool;  // All are booleans
+          columnTypes[j] = bool;
+        } else if (typesInColumn.every((type) => type == Float32List)) {
+          columnTypes[j] = Float32List;
         } else {
-          columnTypes[j] = Object;  // Mixed or other types, use Object
+          columnTypes[j] = Object;
         }
       }
 
       // Create empty transposed matrix with type-specific lists
       transposed = [];
       for (int index = 0; index < maxLength; index++) {
-        List<dynamic> column;
         if (columnTypes[index] == int) {
-          column = List<int>.filled(matrix.length, 0, growable: true);
+          if (!preservedTypes.contains(Int32List)) {
+            transposed.add(NList(List.filled(matrix.length, 0), type: int));
+          } else {
+            transposed.add(List<int>.filled(matrix.length, 0, growable: true));
+          }
         } else if (columnTypes[index] == double) {
-          column = List<double>.filled(matrix.length, 0.0, growable: true);
+          if (!preservedTypes.contains(Float64List)) {
+            transposed.add(NList(List.filled(matrix.length, 0.0), type: double));
+          } else {
+            transposed.add(List<double>.filled(matrix.length, 0.0, growable: true));
+          }
+        } else if (columnTypes[index] == Float32List) {
+          transposed.add(NList(List.filled(matrix.length, 0.0), type: Float32List));
         } else if (columnTypes[index] == String) {
-          column = List<String>.filled(matrix.length, '', growable: true);
+          transposed.add(List<String>.filled(matrix.length, '', growable: true));
         } else if (columnTypes[index] == bool) {
-          column = List<bool>.filled(matrix.length, false, growable: true);
+          transposed.add(List<bool>.filled(matrix.length, false, growable: true));
         } else {
-          column = List<dynamic>.filled(matrix.length, null, growable: true);
+          transposed.add(List<dynamic>.filled(matrix.length, null, growable: true));
         }
-        transposed.add(column);
       }
 
-      // Populate the transposed matrix and convert if necessary ints to doubles
+      // Populate the transposed matrix and convert ints to doubles where necessary
       for (int i = 0; i < matrix.length; i++) {
         for (int j = 0; j < matrix[i].length; j++) {
-          // Check and convert types if necessary
           if (columnTypes[j] == double && matrix[i][j] is int) {
-            // Explicitly convert int to double if the column is expected to hold doubles
             transposed[j][i] = (matrix[i][j] as int).toDouble();
           } else {
-            // Direct assignment when no type conversion is needed
             transposed[j][i] = matrix[i][j];
           }
         }
@@ -497,41 +479,82 @@ class DataFrameCore<T> {
     Type newType;
     List explicitList;
 
-    // Fast path if explicitly typed 
-    if (inputData is NList||inputData is List<int>||inputData is List<double>||inputData is List<String>||inputData is List<bool>) {
+    // Fast path if explicitly typed
+    if (inputData is NList || inputData is List<int> || inputData is List<double> || inputData is List<String> || inputData is List<bool> || inputData is Float32List) {
       newType = checkListGenericType(inputData);
-      // Normalize num -> double if your checker can yield `num`
       if (newType == num) {
-        final out = List<double>.filled(n, 0.0);
-        for (int i = 0; i < n; i++) {
-          out[i] = (inputData[i] as num).toDouble();
+        if (!preservedTypes.contains(Float64List)) {
+          final out = NList(List<double>.filled(n, 0.0), type: double);
+          for (int i = 0; i < n; i++) {
+            out[i] = (inputData[i] as num).toDouble();
+          }
+          newType = double;
+          explicitList = out;
+        } else {
+          final out = List<double>.filled(n, 0.0);
+          for (int i = 0; i < n; i++) {
+            out[i] = (inputData[i] as num).toDouble();
+          }
+          newType = double;
+          explicitList = out;
+        }
+      } else if (newType == int || newType == Int32List) {
+        if (!preservedTypes.contains(Int32List)) {
+          explicitList = inputData is NList ? inputData : NList(inputData, type: int);
+        } else {
+          explicitList = inputData;
+        }
+        newType = int;
+      } else if (newType == double || newType == Float64List) {
+        if (!preservedTypes.contains(Float64List)) {
+          explicitList = inputData is NList ? inputData : NList(inputData, type: double);
+        } else {
+          explicitList = inputData;
         }
         newType = double;
-        explicitList = out;
+      } else if (newType == Float32List) {
+        // Float32List is always preserved — never upscaled to Float64List
+        explicitList = inputData is NList ? inputData : NList(inputData, type: Float32List);
       } else {
         explicitList = inputData;
       }
     }
-    // Normalize List<num> to List<double>
+    // Normalize List<num> to double
     else if (inputData is List<num>) {
-      final output = List<double>.filled(n, 0.0);
-      for (int i = 0; i < n; i++) {
-        output[i] = inputData[i].toDouble();
+      if (!preservedTypes.contains(Float64List)) {
+        final output = NList(List<double>.filled(n, 0.0), type: double);
+        for (int i = 0; i < n; i++) {
+          output[i] = inputData[i].toDouble();
+        }
+        newType = double;
+        explicitList = output;
+      } else {
+        final output = List<double>.filled(n, 0.0);
+        for (int i = 0; i < n; i++) {
+          output[i] = inputData[i].toDouble();
+        }
+        newType = double;
+        explicitList = output;
       }
-      newType = double;
-      explicitList = output;
     }
-    // Untyped / List<dynamic> path: single pass + optional one promotion
+    // Untyped / List<dynamic> path
     else {
       // state:
-      // 0 = unknown, 1 = int, 2 = double, 3 = String, 4 = bool, 5 = Object
+      // 0 = unknown, 1 = int, 2 = double, 3 = String, 4 = bool, 5 = Object, 6 = Float32List
       int state = 0;
 
-      List<int>? outputInt;
-      List<double>? outputDouble;
+      NList? outputInt;
+      NList? outputDouble;
+      NList? outputFloat32;
+      List<int>? outputIntPlain;
+      List<double>? outputDoublePlain;
       List<String>? outputString;
       List<bool>? outputBool;
       List<Object>? outputObject;
+
+      final bool preserveInt = preservedTypes.contains(Int32List);
+      final bool preserveDouble = preservedTypes.contains(Float64List);
+      final bool preserveFloat32 = preservedTypes.contains(Float32List);
 
       for (int i = 0; i < n; i++) {
         final v = inputData[i];
@@ -539,20 +562,35 @@ class DataFrameCore<T> {
         if (state == 0) {
           if (v is int) {
             state = 1;
-            outputInt = List<int>.filled(n, 0);
-            outputInt[i] = v;
+            if (!preserveInt) {
+              outputInt = NList(List<int>.filled(n, 0), type: int);
+              outputInt[i] = v;
+            } else {
+              outputIntPlain = List<int>.filled(n, 0);
+              outputIntPlain[i] = v;
+            }
             continue;
           }
           if (v is double) {
             state = 2;
-            outputDouble = List<double>.filled(n, 0.0);
-            outputDouble[i] = v;
+            if (!preserveDouble) {
+              outputDouble = NList(List<double>.filled(n, 0.0), type: double);
+              outputDouble[i] = v;
+            } else {
+              outputDoublePlain = List<double>.filled(n, 0.0);
+              outputDoublePlain[i] = v;
+            }
             continue;
           }
           if (v is num) {
             state = 2;
-            outputDouble = List<double>.filled(n, 0.0);
-            outputDouble[i] = v.toDouble();
+            if (!preserveDouble) {
+              outputDouble = NList(List<double>.filled(n, 0.0), type: double);
+              outputDouble[i] = v.toDouble();
+            } else {
+              outputDoublePlain = List<double>.filled(n, 0.0);
+              outputDoublePlain[i] = v.toDouble();
+            }
             continue;
           }
           if (v is String) {
@@ -567,7 +605,6 @@ class DataFrameCore<T> {
             outputBool[i] = v;
             continue;
           }
-
           state = 5;
           outputObject = List<Object>.filled(n, 0);
           outputObject[i] = v as Object;
@@ -576,42 +613,107 @@ class DataFrameCore<T> {
 
         if (state == 1) { // int
           if (v is int) {
-            outputInt![i] = v;
+            if (!preserveInt) {
+              outputInt![i] = v;
+            } else {
+              outputIntPlain![i] = v;
+            }
             continue;
           }
           if (v is double) {
-            // promote int -> double (copy prefix once)
-            final d = List<double>.filled(n, 0.0);
-            final oi = outputInt!;
-            for (int k = 0; k < i; k++) {
-              d[k] = oi[k].toDouble();
+            if (!preserveDouble) {
+              final d = NList(List<double>.filled(n, 0.0), type: double);
+              if (!preserveInt) {
+                final oi = outputInt!;
+                for (int k = 0; k < i; k++) {
+                  d[k] = (oi[k] as int).toDouble();
+                }
+                outputInt = null;
+              } else {
+                final oi = outputIntPlain!;
+                for (int k = 0; k < i; k++) {
+                  d[k] = oi[k].toDouble();
+                }
+                outputIntPlain = null;
+              }
+              d[i] = v;
+              outputDouble = d;
+            } else {
+              final d = List<double>.filled(n, 0.0);
+              if (!preserveInt) {
+                final oi = outputInt!;
+                for (int k = 0; k < i; k++) {
+                  d[k] = (oi[k] as int).toDouble();
+                }
+                outputInt = null;
+              } else {
+                final oi = outputIntPlain!;
+                for (int k = 0; k < i; k++) {
+                  d[k] = oi[k].toDouble();
+                }
+                outputIntPlain = null;
+              }
+              d[i] = v;
+              outputDoublePlain = d;
             }
-            d[i] = v;
-            outputInt = null;
-            outputDouble = d;
             state = 2;
             continue;
           }
           if (v is num) {
-            final d = List<double>.filled(n, 0.0);
-            final oi = outputInt!;
-            for (int k = 0; k < i; k++) {
-              d[k] = oi[k].toDouble();
+            if (!preserveDouble) {
+              final d = NList(List<double>.filled(n, 0.0), type: double);
+              if (!preserveInt) {
+                final oi = outputInt!;
+                for (int k = 0; k < i; k++) {
+                  d[k] = (oi[k] as int).toDouble();
+                }
+                outputInt = null;
+              } else {
+                final oi = outputIntPlain!;
+                for (int k = 0; k < i; k++) {
+                  d[k] = oi[k].toDouble();
+                }
+                outputIntPlain = null;
+              }
+              d[i] = v.toDouble();
+              outputDouble = d;
+            } else {
+              final d = List<double>.filled(n, 0.0);
+              if (!preserveInt) {
+                final oi = outputInt!;
+                for (int k = 0; k < i; k++) {
+                  d[k] = (oi[k] as int).toDouble();
+                }
+                outputInt = null;
+              } else {
+                final oi = outputIntPlain!;
+                for (int k = 0; k < i; k++) {
+                  d[k] = oi[k].toDouble();
+                }
+                outputIntPlain = null;
+              }
+              d[i] = v.toDouble();
+              outputDoublePlain = d;
             }
-            d[i] = v.toDouble();
-            outputInt = null;
-            outputDouble = d;
             state = 2;
             continue;
           }
-          // widen -> Object (copy prefix once)
+          // widen -> Object
           final o = List<Object>.filled(n, 0);
-          final oi = outputInt!;
-          for (int k = 0; k < i; k++) {
-            o[k] = oi[k];
+          if (!preserveInt) {
+            final oi = outputInt!;
+            for (int k = 0; k < i; k++) {
+              o[k] = oi[k] as Object;
+            }
+            outputInt = null;
+          } else {
+            final oi = outputIntPlain!;
+            for (int k = 0; k < i; k++) {
+              o[k] = oi[k];
+            }
+            outputIntPlain = null;
           }
           o[i] = v as Object;
-          outputInt = null;
           outputObject = o;
           state = 5;
           continue;
@@ -619,24 +721,63 @@ class DataFrameCore<T> {
 
         if (state == 2) { // double
           if (v is int) {
-            outputDouble![i] = v.toDouble();
+            if (!preserveDouble) {
+              outputDouble![i] = v.toDouble();
+            } else {
+              outputDoublePlain![i] = v.toDouble();
+            }
             continue;
           }
           if (v is double) {
-            outputDouble![i] = v;
+            if (!preserveDouble) {
+              outputDouble![i] = v;
+            } else {
+              outputDoublePlain![i] = v;
+            }
             continue;
           }
           if (v is num) {
-            outputDouble![i] = v.toDouble();
+            if (!preserveDouble) {
+              outputDouble![i] = v.toDouble();
+            } else {
+              outputDoublePlain![i] = v.toDouble();
+            }
             continue;
           }
+          // widen -> Object
           final o = List<Object>.filled(n, 0);
-          final od = outputDouble!;
-          for (int k = 0; k < i; k++) {
-            o[k] = od[k];
+          if (!preserveDouble) {
+            final od = outputDouble!;
+            for (int k = 0; k < i; k++) {
+              o[k] = od[k] as Object;
+            }
+            outputDouble = null;
+          } else {
+            final od = outputDoublePlain!;
+            for (int k = 0; k < i; k++) {
+              o[k] = od[k];
+            }
+            outputDoublePlain = null;
           }
           o[i] = v as Object;
-          outputDouble = null;
+          outputObject = o;
+          state = 5;
+          continue;
+        }
+
+        if (state == 6) { // Float32List
+          if (v is num) {
+            outputFloat32![i] = v.toDouble();
+            continue;
+          }
+          // widen -> Object
+          final o = List<Object>.filled(n, 0);
+          final of32 = outputFloat32!;
+          for (int k = 0; k < i; k++) {
+            o[k] = of32[k] as Object;
+          }
+          o[i] = v as Object;
+          outputFloat32 = null;
           outputObject = o;
           state = 5;
           continue;
@@ -682,10 +823,13 @@ class DataFrameCore<T> {
 
       if (state == 1) {
         newType = int;
-        explicitList = outputInt!;
+        explicitList = preserveInt ? outputIntPlain! : outputInt!;
       } else if (state == 2) {
         newType = double;
-        explicitList = outputDouble!;
+        explicitList = preserveDouble ? outputDoublePlain! : outputDouble!;
+      } else if (state == 6) {
+        newType = Float32List;
+        explicitList = outputFloat32!;
       } else if (state == 3) {
         newType = String;
         explicitList = outputString!;
@@ -697,17 +841,19 @@ class DataFrameCore<T> {
         explicitList = outputObject!;
       }
     }
-    // Store
+
+    // Store — normalize NList dtype back to logical type
+    final storeType = (newType == Int32List) ? int : (newType == Float64List) ? double : newType;
     final columnIndices = columnIndexMap[columnName];
     if (columnIndices != null) {
       for (final int index in columnIndices) {
         data[index] = explicitList;
-        columnTypes[index] = newType;
+        columnTypes[index] = storeType;
       }
     } else {
       addToIndex([columnName], true);
       data.add(explicitList);
-      columnTypes.add(newType);
+      columnTypes.add(storeType);
     }
   }
 }

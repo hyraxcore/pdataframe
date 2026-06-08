@@ -1,3 +1,9 @@
+## 0.2.0 
+- `NList` is now the default internal backing for numerical DataFrame columns.
+- Added Float32List support in `NList`.
+- Added `preserveTypes` argument in `DataFrame` constructor.
+- Various internal changes to support `NList`.
+- Removed the `Series` type.
 ## 0.1.1
 - Added NList (experimental) and its internal storage, NumberList, a wrapper around typed lists.
 ## 0.1.0

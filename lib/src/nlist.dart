@@ -68,7 +68,10 @@ final class NList extends ListBase<Object?> {
   String toString() => _numberList.toString();
   /// Returns the data type of the list.
   Type get dtype => _numberList.dtype;
-  //get backing => _numberList.backing; // For Testing
+
+  /// Returns the raw backing store ([Int32List], [Float64List], [Float32List], or [List]).
+  dynamic get backing => _numberList.backing;
+
 }
 
 // Notes:
@@ -79,13 +82,13 @@ final class NList extends ListBase<Object?> {
 //
 // Null handling: Typed lists cannot store null, so any incoming null value is
 // converted to double.nan. If the current storage is Int32List, it must be promoted
-// to Float64List before storing double.nan. Otherwise, users who require true
-// nullability should use List<int?> directly.
+// to Float64List before storing double.nan. Otherwise, if true nullability is
+// required, List<int?> should be used.
 //
 // Possible changes: 
 //  
 // Null conversion: 
-// If null-conversion policy is ever revised, the only locations
+// If null-conversion policy is ever revised, the locations
 // that perform null -> double.nan conversion are:
 //   - the constructor (which does not accept nullable input lists),
 //   - the index assignment operator ([]=),
@@ -106,11 +109,11 @@ class NumberList {
  
   dynamic _data;  // Storage type will be either Int32List, Float64List, or a generic List
   late Type _colType;   // Only int, double, or Object
-  int _length;             // number of elements
-  int _allocatedLength;   // length of elements+buffer, this value is always private
+  int _length;             // Number of elements
+  int _allocatedLength;   // Length of elements+buffer, this value is always private
 
   // * Getters + Setters *
-  //get backing => _data; // For Testing
+  dynamic get backing => _data;
   Type get dtype => _colType;
   int get length => _length;
 
@@ -146,14 +149,18 @@ class NumberList {
       _promoteInt32ToFloat64();
     }
     // 4.b. List is double
-    if (_colType == Float64List) {
+    if (_colType == Float32List) {
       while (_allocatedLength < value) {
-        _growNumericBuffer(_colType);
+        _growNumericBuffer(Float32List);
+      }
+      final a = _data as Float32List;
+      for (var i = oldLength; i < value; i++) {a[i] = double.nan;}
+    } else if (_colType == Float64List) {
+      while (_allocatedLength < value) {
+        _growNumericBuffer(double);
       }
       final a = _data as Float64List;
-      for (var i = oldLength; i < value; i++) {
-        a[i] = double.nan;
-      }
+      for (var i = oldLength; i < value; i++) {a[i] = double.nan;}
     } else {  
     // 4.c. Object list: treat as normal List
       final a = _data as List;
@@ -246,13 +253,37 @@ class NumberList {
       _colType = Float64List;
       return;
     }
-    // If user specified some non-numeric type explicitly, just fallback immediately.
+    // If user specifies Float32List: try Float32List backing; allow null->NaN; else fallback List<Object?>.
+    if (type == Float32List) {
+      if (input is Float32List) {
+        _data = input;
+        _colType = Float32List;
+        _allocatedLength = input.length;
+        return;
+      }
+      final temp = _createEmptyList(_length, Float32List) as Float32List;
+      for (var i = 0; i < _length; i++) {
+        final v = input[i];
+        if (v == null) {
+          temp[i] = double.nan;
+        } else if (v is num) {
+          temp[i] = v.toDouble();
+        } else {
+          fallbackToObject();
+          return;
+        }
+      }
+      _data = temp;
+      _colType = Float32List;
+      return;
+    }
+    // If user specified some non-numeric type explicitly, fallback immediately.
     if (type != dynamic) {
       fallbackToObject();
       return;
     }
     // Start as Int32List; promote to Float64List on first null or non-int num;
-    // fallback to Object backing on first non-(num|null).
+    // fallback to Object backing on first non-(num/null).
     Int32List i32 = _createEmptyList(_length, int) as Int32List;
     Float64List? f64;
     var mode = 0; // 0=Int32List, 1=Float64List
@@ -261,7 +292,7 @@ class NumberList {
       final v = input[i];
 
       if (mode == 0) { // Int32List
-        if (v == null) { // null forces float64
+        if (v == null) { // null forces Float64List
           f64 = Float64List(_allocatedLength);
           for (var j = 0; j < i; j++) {
             f64[j] = i32[j].toDouble();
@@ -284,7 +315,7 @@ class NumberList {
           mode = 1;
           continue;
         }
-        // Non-numeric => object backing
+        // Non-numeric -> object backing
         fallbackToObject();
         return;
       } else { // mode == 1 (Float64List) 
@@ -314,7 +345,7 @@ class NumberList {
   
   static const _eightMB = 8 * 1024 * 1024;
   static const _sixteenMB = 16 * 1024 * 1024;
-  int _elementBytes(Type t) => (t == int) ? 4 : 8; // int32 vs float64
+  int _elementBytes(Type t) => (t == int || t == Float32List) ? 4 : 8; // int32 vs float64
 
   // Used only during initialization
   int _initialCapacity(int inputLength, int elementByteSize) {
@@ -356,12 +387,17 @@ class NumberList {
     if (t == int) {
       final old = _data as Int32List;
       final next = _createEmptyList(newCap, int) as Int32List;
-      next.setRange(0, _length, old); // copy logical length only
+      next.setRange(0, _length, old);
+      _data = next;
+    } else if (t == Float32List) {
+      final old = _data as Float32List;
+      final next = _createEmptyList(newCap, Float32List) as Float32List;
+      next.setRange(0, _length, old);
       _data = next;
     } else {
       final old = _data as Float64List;
       final next = _createEmptyList(newCap, double) as Float64List;
-      next.setRange(0, _length, old); // copy logical length only
+      next.setRange(0, _length, old);
       _data = next;
     }
     _allocatedLength = newCap;
@@ -373,6 +409,8 @@ class NumberList {
       return Int32List(realListLength);
     } else if (colType == double) {
       return Float64List(realListLength);
+    } else if (colType == Float32List) {
+      return Float32List(realListLength);
     } else {
       return createListFromType(colType);
     }
@@ -391,15 +429,15 @@ class NumberList {
 
   //  Logic for Data Editing:
   //  1. If existing data is type int: check if new data is int, if it is, check if size fits i32l, else promote to f64l.
-  //     If new data is num (or int but out of range), promote to float64l. Otherwise, promote to Object.   
-  //  2.  If existing type is double promote to float64l.
-  //  3.  If existing type is neither int/double, that is a general list, just assign directly. 
+  //     If new data is num (or int but out of range), promote to F64L. Otherwise, promote to Object.   
+  //  2. If existing data is Float32List: promote data to double and add, if not possible, promote to Object.
+  //  3. If existing type is double promote to F64L.
+  //  4. If existing type is neither int/double, that is a general list, just assign directly. 
   void operator []=(int index, Object? newData) {
-    newData ??= double.nan; // current policy is to convert all null to double.nan
+    newData ??= double.nan;
     if (index < 0 || index >= _length) {
       throw RangeError.index(index, this, 'index', 'Index out of range', _length);
     }
-    // 1. Int32List 
     if (_colType == Int32List) {
       if (newData is int) {
         if (_fitsInt32(newData)) {
@@ -419,7 +457,16 @@ class NumberList {
       (_data as List)[index] = newData;
       return;
     }
-    // 2. Float64List 
+    // Float32List case
+    if (_colType == Float32List) {
+      if (newData is num) {
+        (_data as Float32List)[index] = newData.toDouble();
+        return;
+      }
+      _promoteToObjectList();
+      (_data as List)[index] = newData;
+      return;
+    }
     if (_colType == Float64List) {
       if (newData is num) {
         (_data as Float64List)[index] = newData.toDouble();
@@ -429,7 +476,6 @@ class NumberList {
       (_data as List)[index] = newData;
       return;
     }
-    // 3. Standard List
     (_data as List)[index] = newData;
   }
 
@@ -481,38 +527,48 @@ class NumberList {
         _length += 1;
         return;
       }
-      value ??= double.nan;  // null to double.nan conversion
-      if (value is num) {
-        // promote to Float64 and append
+      value ??= double.nan;
+      if (value is num) {  // promote to Float64 and append
         _promoteInt32ToFloat64();
         if (_length == _allocatedLength) _growNumericBuffer(double);
         (_data as Float64List)[_length] = value.toDouble();
         _length += 1;
         return;
+      } 
+      _promoteToObjectList(); // non-num: promote to Object list
+      (_data as List).add(value);
+      _length += 1;
+      return;
+    }
+    // Float32List case
+    if (_colType == Float32List) {
+      value ??= double.nan;
+      if (value is num) {
+        if (_length == _allocatedLength) _growNumericBuffer(Float32List);
+        (_data as Float32List)[_length] = value.toDouble();
+        _length += 1;
+        return;
       }
-      // non-num: promote to Object list
       _promoteToObjectList();
       (_data as List).add(value);
       _length += 1;
       return;
     }
-    // 2. double input
     if (_colType == Float64List) {
-      value ??= double.nan;  // null to double.nan conversion
+      value ??= double.nan;
       if (value is num) {
         if (_length == _allocatedLength) _growNumericBuffer(double);
         (_data as Float64List)[_length] = value.toDouble();
         _length += 1;
         return;
       }
-      // non-num: promote to Object list
       _promoteToObjectList();
       (_data as List).add(value);
       _length += 1;
       return;
     }
-    // Standard List (Object/dynamic)
-    // note: no null conversion; let user decide how to handle when List is not numeric (back to default behaviour)
+   // Standard List (Object/dynamic)
+   // note: no null conversion; let user decide how to handle when List is not numeric (back to default behaviour)
     (_data as List).add(value);
     _length += 1;
   }
@@ -530,25 +586,32 @@ class NumberList {
           _appendF64(v.toDouble());
           continue;
         }
-        // null or non-numeric: promote to Object
         _promoteToObjectList();
         (_data as List).add(v);
         _length += 1;
         continue;
       }
-
+      // Float32List case
+      if (_colType == Float32List) {
+        if (v is num) {
+          _appendF32(v.toDouble());
+          continue;
+        }
+        _promoteToObjectList();
+        (_data as List).add(v);
+        _length += 1;
+        continue;
+      }
       if (_colType == Float64List) {
         if (v is num) {
           _appendF64(v.toDouble());
           continue;
         }
-        // null or non-numeric: promote to Object
         _promoteToObjectList();
         (_data as List).add(v);
         _length += 1;
         continue;
       }
-      // Generic list (Object/dynamic): keep as List
       (_data as List).add(v);
       _length += 1;
     }
@@ -564,7 +627,14 @@ class NumberList {
     (_data as Int32List)[_length] = v;
     _length += 1;
   }
-
+  // Check capacity and append one Float32 value
+  void _appendF32(double v) {
+    if (_length == _allocatedLength) {
+      _growNumericBuffer(Float32List);
+    }
+    (_data as Float32List)[_length] = v;
+    _length += 1;
+  }
   // Check capacity and append one Float64 value
   void _appendF64(double v) {
     if (_length == _allocatedLength) {
@@ -580,12 +650,16 @@ class NumberList {
     if (_colType == Int32List) {
       final a = _data as Int32List;
       return a.getRange(0, length).map<Object?>((e) => e).iterator;
+    } else if (_colType == Float32List) {
+      
+      final a = _data as Float32List;
+      return a.getRange(0, length).map<Object?>((e) => e).iterator;
     } else if (_colType == Float64List) {
       final a = _data as Float64List;
       return a.getRange(0, length).map<Object?>((e) => e).iterator;
     } else {
       final a = _data as List<Object?>;
-      return a.getRange(0, length).iterator; 
+      return a.getRange(0, length).iterator;
     }
   }
   
@@ -596,6 +670,11 @@ class NumberList {
     if (_colType == Int32List) {
       final col = _data as Int32List;
       final view = col.buffer.asInt32List(col.offsetInBytes, _length);
+      return view.toString();
+    } else if (_colType == Float32List) {
+      
+      final col = _data as Float32List;
+      final view = col.buffer.asFloat32List(col.offsetInBytes, _length);
       return view.toString();
     } else if (_colType == Float64List) {
       final col = _data as Float64List;
